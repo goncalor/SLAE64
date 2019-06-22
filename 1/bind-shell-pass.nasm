@@ -13,13 +13,12 @@ socket:
     ; SOCK_STREAM = 1
     ; __NR_socket = 41
 
-    xor rax, rax
-    xor rdi, rdi
-    xor rsi, rsi
-
-    add al, 41
-    mov dil, 2
-    mov sil, 1
+    push 41
+    pop rax
+    push 2
+    pop rdi
+    push 1
+    pop rsi
     xor rdx, rdx
     syscall
 
