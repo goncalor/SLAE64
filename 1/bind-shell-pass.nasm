@@ -13,10 +13,14 @@ real_start:
     ; SOCK_STREAM = 1
     ; __NR_socket = 41
 
-    mov rax, 41
-    mov rdi, 2
-    mov rsi, 1
-    mov rdx, 0
+    xor rax, rax
+    xor rdi, rdi
+    xor rsi, rsi
+
+    add al, 41
+    mov dil, 2
+    mov sil, 1
+    xor rdx, rdx
     syscall
 
     mov rdi, rax
