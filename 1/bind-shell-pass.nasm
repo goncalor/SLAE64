@@ -81,7 +81,6 @@ accept:
     syscall
     
     push rax
-    pop rbx
 
 close:
     ; close(sock)
@@ -99,9 +98,10 @@ dup2:
     ; __NR_dup2 = 33
     ; On success, return the new file descriptor
 
+    pop rdi        ; "new" was pushed in accept()
+    ;xor esi, esi  ; already done in accept()
+
     mov al, 33
-    mov rdi, rbx
-    xor esi, esi
     syscall
 
     mov al, 33
