@@ -19,7 +19,7 @@ socket:
     pop rdi
     push 1
     pop rsi
-    xor edx, edx  ; shorter and will still zero the upper bytes
+    cdq       ; copies rax's bit 31 to all bits of edx (zeroes rdx)
     syscall
 
     mov rdi, rax
@@ -43,7 +43,7 @@ bind:
     ; AF_INET = 2
     ; __NR_bind = 49
 
-    xor eax, eax
+    xor eax, eax  ; shorter and will still zero the upper bytes
     push rax
     mov dword [rsp-4], eax
     sub rsp, 4
