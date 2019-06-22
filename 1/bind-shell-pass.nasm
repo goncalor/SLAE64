@@ -82,7 +82,7 @@ accept:
     
     push rax
 
-close:
+;close:
     ; close(sock)
     ; __NR_close = 3
     ; returns zero on success
@@ -99,18 +99,14 @@ dup2:
     ; On success, return the new file descriptor
 
     pop rdi        ; "new" was pushed in accept()
-    ;xor esi, esi  ; already done in accept()
+    push 2
+    pop rsi
 
+dup2_loop:
     mov al, 33
     syscall
-
-    mov al, 33
-    inc rsi
-    syscall
-
-    mov al, 33
-    inc rsi
-    syscall
+    dec esi
+    jns dup2_loop
 
 check_password:
     xor eax, eax
