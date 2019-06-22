@@ -1,5 +1,6 @@
 global _start
 
+%define _START
 _start:
 
     ; sock = socket(AF_INET, SOCK_STREAM, 0)
