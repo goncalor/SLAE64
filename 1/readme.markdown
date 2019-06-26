@@ -92,7 +92,7 @@ You can a syscall by putting its number in RAX and its arguments in RDI, RSI, RD
 
 Calling [`bind(2)`][man_2_bind] is probably the part of this shellcode most prone to confusion. The first argument is the ID (know as "file descriptor") of the socket created by `socket`.
 
-The second argument is a pointer to a structure of the type `sockaddr_in`. So you need to create this structure in memory and then get a pointer to it. To understand this structure [Beej's Guide to Network Programming][beej_sockaddr_in] is a valuable resource. We see `sockaddr_in` is defined as follows:
+The second argument is a pointer to a structure of the type `sockaddr_in`. So you need to create this structure in memory and then get a pointer to it. To understand this structure [Beej's Guide to Network Programming][beej_sockaddr_in] is a valuable resource. We see `sockaddr_in` is declared as follows:
 
     struct sockaddr_in {
         short            sin_family;
@@ -101,30 +101,35 @@ The second argument is a pointer to a structure of the type `sockaddr_in`. So yo
         char             sin_zero[8];
     };
 
-This definition lets you know the memory layout for the structure. `sin_family` and `sin_port` are `short` which correspond to 16 bits. `sin_addr` is a `struct in_addr` which from Beej's Guide you can see corresponds to a `long`, i.e. 32 bits. And lastly `sin_zero` is an 8-`char` array, or 64 bits in total. So the memory layout of `sockaddr_in` can be represented as follows:
+This definition lets you know the memory layout for the structure. `sin_family` and `sin_port` are `short` which correspond to 2 bytes. `sin_addr` is a `struct in_addr` which from Beej's Guide you can see corresponds to a `long`, i.e. 4 bytes. And lastly `sin_zero` is an 8-`char` array, or 8 bytes in total. So the memory layout of `sockaddr_in` in the stack can be represented as follows:
 
-    +---+---+---+---+---+---+---+---+     
-    |   sin_family  |   sin_port    |    ↑ lower addresses
-    +---+---+---+---+---+---+---+---+    |
-    |           sin_addr            |    |
-    +---+---+---+---+---+---+---+---+    | stack
-    |         sin_zero[0-3]         |    |
-    +---+---+---+---+---+---+---+---+    |
-    |         sin_zero[4-7]         |    | higher addresses
-    +---+---+---+---+---+---+---+---+     
+      0         1   2         3   4                       7
+    +------+------+------+------+------+------+------+------+
+    | sin_family  |  sin_port   |         sin_addr          |    ↑ lower addresses
+    +------+------+------+------+------+------+------+------+    |  stack
+    |                       sin_zero                        |    | higher addresses
+    +------+------+------+------+------+------+------+------+
+
+Since the stack grows from higher to lower addresses the structure members are pushed onto the stack in reverse order from the one they appear in the declaration: `sin_zero`, then `sin_addr`, `sin_port` and lastly `sin_family`.
+
+In the C code you can see the port to bind to is passed to `htons()`. This functions stands for "host-to-network-short" and converts ports numbers from the the format used in the host (your PC) to that used in the network (your local network, the Internet, etc.). This is closely related with [endianness][endianness]. From `man htons` you see that on i386 network byte order corresponds to big-endian:
+
+> On the i386 the host byte order is Least Significant Byte first, whereas the network byte order, as used on the Internet, is Most Significant Byte first.
+
+Since the endianness of Intel processors is litte-endian you have to push the bytes of the port in reverse order: if you want to use port 4444 (hex 0x115c) you push 0x5c11. You can use Python to do this conversion for you:
+
+    $ python3
+    >>>
+    >>> import socket
+    >>> hex(socket.htons(4444))
+    '0x5c11'
+
+At last the third argument to the `bind` syscall is the size of the address structure, which as seen in the memory diagram above is 16 bytes.
 
     ; server.sin_family = AF_INET;    short
     ; server.sin_port = htons(4444);    unsigned short
     ; server.sin_addr.s_addr = INADDR_ANY;    unsigned long
     ; bzero(&server.sin_zero, 8);
-    ;
-    ; https://beej.us/guide/bgnet/html/multi/sockaddr_inman.html
-    ; struct sockaddr_in {
-    ;     short            sin_family;
-    ;     unsigned short   sin_port;
-    ;     struct in_addr   sin_addr;
-    ;     char             sin_zero[8];
-    ; };
     ;
     ; bind(sock, (struct sockaddr *)&server, sockaddr_len)
     ; INADDR_ANY = 0
@@ -140,7 +145,7 @@ This definition lets you know the memory layout for the structure. `sin_family` 
 
     ; bind
     mov rax, 49
-    mov rsi, rsp
+    mov rsi, rsp ; &server
     mov rdx, 16  ; sizeof(sockaddr_in)
     syscall
 
@@ -149,6 +154,7 @@ This definition lets you know the memory layout for the structure. `sin_family` 
 [man_2_syscall]: https://linux.die.net/man/2/syscall
 [man_2_bind]: https://linux.die.net/man/2/bind
 [beej_sockaddr_in]: https://beej.us/guide/bgnet/html/multi/sockaddr_inman.html
+[endianness]: https://en.wikipedia.org/wiki/Endianness
 
 ----
 
