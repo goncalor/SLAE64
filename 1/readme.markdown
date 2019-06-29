@@ -114,11 +114,7 @@ This definition lets you know the memory layout for the structure. `sin_family` 
 
 Since the stack grows from higher to lower addresses the structure members are pushed onto the stack in reverse order from the one they appear in the declaration: `sin_zero`, then `sin_addr`, `sin_port` and lastly `sin_family`.
 
-In the C code you can see the port to bind to is passed to `htons()`. This functions stands for "host-to-network-short" and converts ports numbers from the the format used in the host (your PC) to that used in the network (your local network, the Internet, etc.). This is closely related with [endianness][endianness]. From `man htons` you see that on i386 network byte order corresponds to big-endian:
-
-> On the i386 the host byte order is Least Significant Byte first, whereas the network byte order, as used on the Internet, is Most Significant Byte first.
-
-Since the endianness of Intel processors is litte-endian you have to push the bytes of the port in reverse order: if you want to use port 4444 (hex 0x115c) you push 0x5c11. You can use Python to do this conversion for you:
+In the C code you can see the port to bind to is passed to `htons()`. On x86(-64) this function basically swaps the two bytes of the port number. So if you pass 0x0d3d to `htons()` it would return 0x3d0d on such a system. Why is this needed? Because the [endianness][endianness] of the processor (little-endian) is not the same as that used by the network (big-endian). So you have to reverse the bytes of port numbers (and IP addresses) so that the network understands what you mean. And that is precisely what `htons()` or "host-to-network-short" does. You can use Python to do this conversion for you:
 
     $ python3
     >>>
@@ -212,6 +208,8 @@ These syscalls will make sure all keystrokes arriving through the connection are
 
 ### `execve()`
 
+The shell is spawned by this part of the shellcode. I decided to use the execve stack method, which consists in calling [`execve(2)`][man_2_execve] after pushing its arguments to the stack.
+
     ; int execve(const char *path, char *const argv[], char *const envp[])
     ; rdi, path = (char*) /bin//sh, 0x00 (double slash for padding)
     ; rsi, argv = (char**) (/bin//sh, 0x00)
@@ -236,6 +234,7 @@ These syscalls will make sure all keystrokes arriving through the connection are
 
 [man_2_syscall]: https://linux.die.net/man/2/syscall
 [man_2_bind]: https://linux.die.net/man/2/bind
+[man_2_execve]: https://linux.die.net/man/2/execve
 [beej_sockaddr_in]: https://beej.us/guide/bgnet/html/multi/sockaddr_inman.html
 [endianness]: https://en.wikipedia.org/wiki/Endianness
 
