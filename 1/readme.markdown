@@ -257,6 +257,12 @@ This definition will allow to change the shellcode's password trivially by chang
 
 ### Read the password
 
+We need to read input from the user. How do we do this? We use the `read(2)` syscall. We need to pass it which file descriptor to read from, the address where to read to, and how many bytes to read. The file descriptior we want will be the one that was returned by `accept`, so that the password is read from the TCP connection. However, I started by reading from `stdin`, which corresponds to file descriptor 0 (see [`man stdin`][man_3_stdin]). This way I was able to test the password part of the code separetely from the network part, to ease testing.
+
+I picked the read size as 16, so the shellcode will work correctly with passwords up to 16 bytes. To increase this limit all that needs to be done is changing 16 to a greater value.
+
+    ; read(int fd, void *buf, size_t count)
+
     mov rax, 0
     mov rdi, 0    ; fd
     sub rsp, 16   ; create space for "buf" in the stack
@@ -264,19 +270,41 @@ This definition will allow to change the shellcode's password trivially by chang
     mov rdx, 16
     syscall
 
-    ; compare password
-    xor rcx, rcx
-    mov cl, [rel pass_len]
-    lea rdi, [rel password]
-    cld
-    repz cmpsb
-    jne exit
+### Compare the passwords
+
+To compare the passwords we have to compare the value in the memory written to by `read` with the bytes defined in the `password` label. Quick question: how many bytes do we need to compare?
+
+1. The number returned by `read` ("On success, the number of bytes read is returned")
+1. As many as the length of `password`
+
+Which did you pick? Picking the wrong one would result in a trivial authentication bypass ;) Answer below.
+
+To compare the passwords you could write a loop. Instead, I chose to leverage the `repz` instruction combined with `cmpsb`. `repz` repeats an instruction while RCX is not zero and ZF is set, decrementing RCX after each repetition; while `cmpsb` compares the byte at the address in RSI with the one at the address of RDI, updates the flags register and increments/decrements RSI and RDI according to the direction flag (DF).
+
+The result is that `repz` will stop repeating when the length to compare (in RCX) reaches 0 or a byte of the passwords does not match. To know which happened we can check the ZF flag: if it's not set it means `repz` ended because of a non-matching byte and the password is wrong. In that case we call `exit`. Otherwise the password is correct and we spawn the shell.
+
+        xor rcx, rcx
+        mov cl, [rel pass_len]
+        lea rdi, [rel password]
+        cld
+        repz cmpsb
+        jne exit
+
+        ; spawn the shell
+
+    exit:
+        mov rax, 60
+        syscall
+
+Answer: you should pick the second option.
 
 
 [man_2_syscall]: https://linux.die.net/man/2/syscall
 [man_2_bind]: https://linux.die.net/man/2/bind
 [man_2_dup2]: https://linux.die.net/man/2/dup2
 [man_2_execve]: https://linux.die.net/man/2/execve
+[man_2_read]: https://linux.die.net/man/2/read
+[man_3_stdin]: https://linux.die.net/man/3/stdin
 [beej_sockaddr_in]: https://beej.us/guide/bgnet/html/multi/sockaddr_inman.html
 [endianness]: https://en.wikipedia.org/wiki/Endianness
 
