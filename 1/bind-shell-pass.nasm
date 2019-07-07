@@ -79,7 +79,7 @@ accept:
     xor esi, esi
     ;xor rdx, rdx  ; already zeroed
     syscall
-    
+
     push rax
 
 ;close:
