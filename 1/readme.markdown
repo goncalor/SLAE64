@@ -49,7 +49,7 @@ Breaking it down we have seven parts:
   1. `dup2()`. Duplicate file descriptors to connect `stdin`, `stdout` and `stderr` to the incoming connection
   1. `execve()`. Replace the current process image with `/bin/sh`
 
-With the C code as reference each os these parts was implemented in assembly as follows.
+With the C code as reference each of these parts was implemented in assembly as follows.
 
 ----
 
@@ -244,7 +244,7 @@ To password protect the shell we need to do two things:
 If the password is correct the shellcode spawns a shell, otherwise it quits. I defined a few objectives for this shellcode that were not specified in the assignment:
 
 - I wanted the password to be of *any size* up to at least 16 bytes
-- and that it would be trival to change the password, no special knowledge needed
+- and that it would be trivial to change the password, no special knowledge needed
 
 ### Defining the password
 
@@ -257,7 +257,7 @@ This definition will allow to change the shellcode's password trivially by chang
 
 ### Read the password
 
-We need to read input from the user. How do we do this? We use the `read(2)` syscall. We need to pass it which file descriptor to read from, the address where to read to, and how many bytes to read. The file descriptior we want will be the one that was returned by `accept`, so that the password is read from the TCP connection. However, I started by reading from `stdin`, which corresponds to file descriptor 0 (see [`man stdin`][man_3_stdin]). This way I was able to test the password part of the code separetely from the network part, to ease testing.
+We need to read input from the user. How do we do this? We use the `read(2)` syscall. We need to pass it which file descriptor to read from, the address where to read to, and how many bytes to read. The file description we want will be the one that was returned by `accept`, so that the password is read from the TCP connection. However, I started by reading from `stdin`, which corresponds to file descriptor 0 (see [`man stdin`][man_3_stdin]). This way I was able to test the password part of the code separately from the network part, to ease testing.
 
 I picked the read size as 16, so the shellcode will work correctly with passwords up to 16 bytes. To increase this limit all that needs to be done is changing 16 to a greater value.
 
@@ -301,7 +301,7 @@ Answer: you should pick the second option.
 Complete shellcode
 ------------------
 
-At this point we have a complete shellcode for a password-protected TCP bind shell! Yay! Buf if you assemble this shellcode you will see it's full of null bytes (see below). We'll take care of that in the next section.
+At this point we have a complete shellcode for a password-protected TCP bind shell! Yay! But if you assemble this shellcode you will see it's full of null bytes (see below). We'll take care of that in the next section.
 
 Regarding the shellcode size right now we have 211 bytes. This can be substantially improved.
 
@@ -571,7 +571,7 @@ For instructions with labels, such as `jne exit` and `lea rdi, [rel password]`, 
 
 ### xor self/mov imm vs push imm/pop
 
-At the beggining of our shellcode we have no garantees about the values in the registers. So to set RAX to 41, without nulls, we can do something as:
+At the beginning of our shellcode we have no guarantee about the values in the registers. So to set RAX to 41, without nulls, we can do something as:
 
     xor rax, rax
     mov al, 41
@@ -642,7 +642,7 @@ As you can see the `mov` and `sub` took 4 bytes each. Is there another instructi
     66 50
     66 50
 
-So we are able to reduce those 8 bytes to just 4. Since we wanted to reserve 4 bytes why not use `push eax`? Well, unfortunatelly `push` does not support 32-bit registers in x86-64 so I had to push 16 bits twice.
+So we are able to reduce those 8 bytes to just 4. Since we wanted to reserve 4 bytes why not use `push eax`? Well, unfortunately `push` does not support 32-bit registers in x86-64 so I had to push 16 bits twice.
 
 ### mov r64, r64 vs push r64/pop r64
 
@@ -682,7 +682,7 @@ In the password comparison part I used the two relative address instructions:
     repz cmpsb
     jne exit
 
-If we disassemble these instructions we see that unfortunatelly the relative offsets adds six 0xff:
+If we disassemble these instructions we see that unfortunately the relative offsets adds six 0xff:
 
     8a 0d ae ff ff ff       mov    cl,BYTE PTR [rip+0xffffffffffffffae]   # 6 <pass_len>
     48 8d 3d a3 ff ff ff    lea    rdi,[rip+0xffffffffffffffa3]           # 2 <password>
@@ -703,7 +703,7 @@ I tried this and after adjusting the code to this change 12 bytes were saved. Ho
 Conclusion
 ----------
 
-We're done. The shellcode works, it has no nulls and we've shortned it. The final shellcode is at the end.
+We're done. The shellcode works, it has no nulls and we've shortened it. The final shellcode is at the end.
 
     $ nasm -felf64 bind-shell-pass.nasm
     $ objdump -d bind-shell-pass.o | grep -P ":\t" | cut -f2 | tr -d ' \n' | sed -e 's/../\\x&/g'
@@ -825,7 +825,7 @@ That is all. Thank you for reading. Final shellcode below.
         xor esi, esi
         ;xor rdx, rdx  ; already zeroed
         syscall
-        
+
         push rax
 
     ;close:
