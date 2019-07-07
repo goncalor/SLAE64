@@ -581,11 +581,11 @@ At the beggining of our shellcode we have no garantees about the values in the r
 
 This takes 5 bytes. However, the same can be accomplished by pushing the immediate value and popping to the 64-bit register, which ensures the upper bytes of the register will be overwritten.
 
-	push 41
-	pop rax
+    push 41
+    pop rax
 
-	6a 29
-	58
+    6a 29
+    58
 
 As you can see we reduce 2 bytes for each of these substitutions.
 
@@ -593,15 +593,15 @@ As you can see we reduce 2 bytes for each of these substitutions.
 
 Xoring registers to zero them is a common operation. Xoring 64-bit registers takes 3 bytes:
 
-	xor rax, rax
+    xor rax, rax
 
-	48 31 c0
+    48 31 c0
 
 However we can obtain the same effect by xoring only the lower 32 bits, which takes only 2 bytes.
 
-	xor eax, eax
+    xor eax, eax
 
-	31 c0
+    31 c0
 
 What will happen to the upper 32 bits, you may ask? When you write to the lower 32 bits of a register the upper 32 bits are reset so we're good for zeroing.
 
@@ -614,12 +614,35 @@ What will happen to the upper 32 bits, you may ask? When you write to the lower 
 
 This is very specific, but if you know that the 31st bit of RAX is zero and want to zero RDX you can use [`cdq`][cdq]. This instruction copies RAX's bit 31 to all bits of EDX, hence zeroing RDX. We save one byte.
 
-	xor edx, edx
-	31 d2
+    xor edx, edx
+    31 d2
 
-	cdq
-	99
+    cdq
+    99
 
+### Reserving stack space
+
+Reserving space on the stack involves adjusting RSP by subtracting the number of bytes to reserve. In some cases you might also need to initialise the reserved bytes. This was the case when preparing the structure for `bind`. We wanted to reserve 4 bytes for `sin_addr` and zero them. I did it like this:
+
+    xor eax, eax
+    mov dword [rsp-4], eax
+    sub rsp, 4
+
+    31 c0
+    89 44 24 fc
+    48 83 ec 04
+
+As you can see the `mov` and `sub` took 4 bytes each. Is there another instruction that can adjust RSP and write to the stack? Yes, `push` does that. So we can write the same as follows:
+
+    xor eax, eax
+    push ax
+    push ax
+
+    31 c0
+    66 50
+    66 50
+
+So we are able to reduce those 8 bytes to just 4. Since we wanted to reserve 4 bytes why not use `push eax`? Well, unfortunatelly `push` does not support 32-bit registers in x86-64 so I had to push 16 bits twice.
 
 
 [man_2_syscall]: https://linux.die.net/man/2/syscall
