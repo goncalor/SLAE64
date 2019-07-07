@@ -133,6 +133,6 @@ execve:
     %include "execve-stack.nasm"
 
 exit:
-    xor eax, eax
+    ;xor eax, eax  ; upper bytes are zero after read
     mov al, 60
     syscall
