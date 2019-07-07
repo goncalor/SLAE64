@@ -644,6 +644,63 @@ As you can see the `mov` and `sub` took 4 bytes each. Is there another instructi
 
 So we are able to reduce those 8 bytes to just 4. Since we wanted to reserve 4 bytes why not use `push eax`? Well, unfortunatelly `push` does not support 32-bit registers in x86-64 so I had to push 16 bits twice.
 
+### mov r64, r64 vs push r64/pop r64
+
+Another common operation is to move values between 64-bit registers. The opcodes for these operations use 3 bytes:
+
+    mov rbx, rax
+
+    48 89 c3
+
+As you may have noticed pushing and popping 64-bit registers results in 1-byte opcodes. Therefore, we can rewrite 64-bit register moves a `push` followed by a `pop`:
+
+    push rax
+    pop rbx
+
+    50
+    5b
+
+We save 1 byte for each of these operations.
+
+### Take advantage of syscall return values
+
+Syscall return values are placed in RAX. On success most syscalls return a non-negative integer. This come can in handy because it might help with the initialisations of RAX. For example to call `listen` we need `rax=50`. Normally we'd for example:
+
+    xor rax, rax
+    mov al, 50
+
+However, since before calling `listen` we call `bind`, which on success returns zero, we can drop the xor and save an instruction. Even if a syscall does not return zero, if it returns a small positive integer we know the upper bytes of RAX will be zeroed.
+
+### Pushing the password
+
+In the password comparison part I used the two relative address instructions:
+
+    xor ecx, ecx
+    mov cl, [rel pass_len]
+    lea rdi, [rel password]
+    cld
+    repz cmpsb
+    jne exit
+
+If we disassemble these instructions we see that unfortunatelly the relative offsets adds six 0xff:
+
+    8a 0d ae ff ff ff       mov    cl,BYTE PTR [rip+0xffffffffffffffae]   # 6 <pass_len>
+    48 8d 3d a3 ff ff ff    lea    rdi,[rip+0xffffffffffffffa3]           # 2 <password>
+
+It would be nice to get rid of those 0xff. I could find no way to shorten the offset. But we could get rid of the offsets altogether by pushing the correct password and its length to the stack before we do the comparison.
+
+    push dword 0x73736170  ; password "pass"
+    push 4                 ; password length
+    pop rcx
+    push rsp
+    pop rdi        ; rdi = *password
+    cld
+    repz cmpsb
+    jne exit
+
+I tried this and after adjusting the code to this change 12 bytes were saved. However, I opted *not to use* this optimisation in the final shellcode. Why? Because I want the password to be trivial to change. Changing the password in the code above would require not only to calculate the new number to push but also to modify the instructions. Imagine you wanted to use "foobar" as the password instead: a single push of 4 bytes would no longer work, you'd have to add another push of 2 bytes. Oh, and don't forget to change the length of the password! Compare this with the ease of just typing in a new password.
+
+
 
 [man_2_syscall]: https://linux.die.net/man/2/syscall
 [man_2_bind]: https://linux.die.net/man/2/bind
