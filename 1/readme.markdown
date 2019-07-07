@@ -545,6 +545,83 @@ Example:
 Optimising
 ----------
 
+After removing null bytes my shellcode was 183 bytes long. Can we do better? Yes, we can.
+
+To do this my process was to go through each part of the code and think about and try optimisations for each. It involved trial and error (assembling and disassembling) to understand which equivalent instructions could be used that were shorted. The [Intel development manuals][intel_sdm] and/or [this site][felixcloutier_x86] are also useful. Below I'll explain my main optimisations.
+
+To ease taking a look at the length of opcodes you can leverage Radare2's `rasm2` to interactively get the opcodes for instructions:
+
+    $ cat | xargs -I{} rasm2 -a x86 -b64 {} | sed -e 's/../& /g'
+    xor rax, rax
+    48 31 c0
+    mov al, 41
+    b0 29
+
+Or non-interactively:
+
+    $ echo -e 'xor rax, rax \n mov al, 41' | xargs -I{} rasm2 -a x86 -b64 {} | sed -e 's/../& /g'
+    48 31 c0
+    b0 29
+
+The `sed` part is optional. It's just so the output is for example `48 31 c0` instead of `4831c0`.
+
+For instructions with labels, such as `jne exit` and `lea rdi, [rel password]`, this method won't work and you should assemble and disassemble to look at the opcodes. In these cases it might be useful to disassemble just part of the code, for example if you want do disassemble only from the label `check_password` until the next label you can use:
+
+    objdump -M intel bind-shell-pass.o --disassemble=check_password
+
+### xor self/mov imm vs push imm/pop
+
+At the beggining of our shellcode we have no garantees about the values in the registers. So to set RAX to 41, without nulls, we can do something as:
+
+    xor rax, rax
+    mov al, 41
+
+    48 31 c0
+    b0 29
+
+This takes 5 bytes. However, the same can be accomplished by pushing the immediate value and popping to the 64-bit register, which ensures the upper bytes of the register will be overwritten.
+
+	push 41
+	pop rax
+
+	6a 29
+	58
+
+As you can see we reduce 2 bytes for each of these substitutions.
+
+### xor r64, r64 vs xor r32, r32
+
+Xoring registers to zero them is a common operation. Xoring 64-bit registers takes 3 bytes:
+
+	xor rax, rax
+
+	48 31 c0
+
+However we can obtain the same effect by xoring only the lower 32 bits, which takes only 2 bytes.
+
+	xor eax, eax
+
+	31 c0
+
+What will happen to the upper 32 bits, you may ask? When you write to the lower 32 bits of a register the upper 32 bits are reset so we're good for zeroing.
+
+> When in 64-bit mode, operand size determines the number of valid bits in the destination general-purpose register:
+> - 64-bit operands generate a 64-bit result in the destination general-purpose register.
+> - **32-bit operands generate a 32-bit result, zero-extended to a 64-bit result in the destination general-purpose register.**
+> - 8-bit and 16-bit operands generate an 8-bit or 16-bit result. The upper 56 bits or 48 bits (respectively) of the destination general-purpose register are not modified by the operation.
+
+### xor edx, edx vs cdq
+
+This is very specific, but if you know that the 31st bit of RAX is zero and want to zero RDX you can use [`cdq`][cdq]. This instruction copies RAX's bit 31 to all bits of EDX, hence zeroing RDX. We save one byte.
+
+	xor edx, edx
+	31 d2
+
+	cdq
+	99
+
+
+
 [man_2_syscall]: https://linux.die.net/man/2/syscall
 [man_2_bind]: https://linux.die.net/man/2/bind
 [man_2_dup2]: https://linux.die.net/man/2/dup2
@@ -553,6 +630,9 @@ Optimising
 [man_3_stdin]: https://linux.die.net/man/3/stdin
 [beej_sockaddr_in]: https://beej.us/guide/bgnet/html/multi/sockaddr_inman.html
 [endianness]: https://en.wikipedia.org/wiki/Endianness
+[intel_sdm]: https://software.intel.com/en-us/articles/intel-sdm
+[felixcloutier_x86]: https://www.felixcloutier.com/x86/
+[cdq]: https://www.felixcloutier.com/x86/cwd:cdq:cqo
 
 ----
 
