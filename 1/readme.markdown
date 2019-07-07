@@ -58,7 +58,6 @@ With the C code as reference each of these parts was implemented in assembly as 
 You need to call [`syscall(2)`][man_2_syscall] with the appropriate arguments. To figure out the values of the macros `AF_INET` and `SOCK_STREAM` you can use Python:
 
     $ python3
-    >>>
     >>> import socket
     >>> socket.AF_INET
     <AddressFamily.AF_INET: 2>
@@ -73,7 +72,7 @@ The numbers for syscalls can be found in `/usr/include/asm/unistd_64.h`. From th
     #define __NR_accept 43
     ...
 
-You can a syscall by putting its number in RAX and its arguments in RDI, RSI, RDX, R10, R8, R9, in that order. Lastly you can the syscall with the `syscall` instruction. The return value of the syscall is stored in RAX. With all this information we are able to write the following code.
+You prepare to execute a syscall by putting its number in RAX and its arguments in RDI, RSI, RDX, R10, R8, R9, in that order. Lastly, you execute the syscall with the `syscall` instruction. The return value of the syscall is stored in RAX. With all this information we are able to write the following code.
 
     ; sock = socket(AF_INET, SOCK_STREAM, 0)
     ; AF_INET = 2
@@ -88,7 +87,7 @@ You can a syscall by putting its number in RAX and its arguments in RDI, RSI, RD
 
     mov rdi, rax
 
-The return value is moved to RDI for later use in other syscalls.
+The return value is moved to RDI for later use as an argument for other syscalls.
 
 ### `bind()`
 
@@ -103,7 +102,7 @@ The second argument is a pointer to a structure of the type `sockaddr_in`. So yo
         char             sin_zero[8];
     };
 
-This definition lets you know the memory layout for the structure. `sin_family` and `sin_port` are `short` which correspond to 2 bytes. `sin_addr` is a `struct in_addr` which from Beej's Guide you can see corresponds to a `long`, i.e. 4 bytes. And lastly `sin_zero` is an 8-`char` array, or 8 bytes in total. So the memory layout of `sockaddr_in` in the stack can be represented as follows:
+This definition lets you know the memory layout for the structure. `sin_family` and `sin_port` are `short` which corresponds to 2 bytes. `sin_addr` is a `struct in_addr` which from Beej's Guide you can see corresponds to a `long`, i.e. 4 bytes. And lastly `sin_zero` is an 8-`char` array, or 8 bytes in total. So the memory layout of `sockaddr_in` in the stack can be represented as follows:
 
       0         1   2         3   4                       7
     +------+------+------+------+------+------+------+------+
@@ -112,17 +111,16 @@ This definition lets you know the memory layout for the structure. `sin_family` 
     |                       sin_zero                        |    | higher addresses
     +------+------+------+------+------+------+------+------+
 
-Since the stack grows from higher to lower addresses the structure members are pushed onto the stack in reverse order from the one they appear in the declaration: `sin_zero`, then `sin_addr`, `sin_port` and lastly `sin_family`.
+Since the stack grows from higher to lower addresses, the structure members are pushed onto the stack in reverse order from the one they appear in the declaration: `sin_zero`, then `sin_addr`, `sin_port` and lastly `sin_family`.
 
-In the C code you can see the port to bind to is passed to `htons()`. On x86(-64) this function basically swaps the two bytes of the port number. So if you pass 0x0d3d to `htons()` it would return 0x3d0d on such a system. Why is this needed? Because the [endianness][endianness] of the processor (little-endian) is not the same as that used by the network (big-endian). So you have to reverse the bytes of port numbers (and IP addresses) so that the network understands what you mean. And that is precisely what `htons()` or "host-to-network-short" does. You can use Python to do this conversion for you:
+In the C code you can see the port to bind to is passed to `htons()`. On x86(-64) this function basically swaps the two bytes of the port number. So if you pass 0x0d3d to `htons()` it would return 0x3d0d on such a system. Why is this needed? Because the [endianness][endianness] of the processor (little-endian) is not the same as that used by the network (big-endian). So you have to reverse the bytes of port numbers (and IP addresses) so that the network understands you. And that is precisely what `htons()` or "host-to-network-short" does. You can use Python to do this conversion:
 
     $ python3
-    >>>
     >>> import socket
     >>> hex(socket.htons(4444))
     '0x5c11'
 
-At last the third argument to the `bind` syscall is the size of the address structure, which as seen in the memory diagram above is 16 bytes.
+At last, the third argument to the `bind` syscall is the size of the address structure, which as seen in the memory diagram above is 16 bytes.
 
     ; server.sin_family = AF_INET;    short
     ; server.sin_port = htons(4444);    unsigned short
@@ -144,8 +142,8 @@ At last the third argument to the `bind` syscall is the size of the address stru
     ; bind
     mov rax, 49
     ; rdi already set before
-    mov rsi, rsp ; &server
-    mov rdx, 16  ; sizeof(sockaddr_in)
+    mov rsi, rsp      ; &server
+    mov rdx, 16       ; sizeof(sockaddr_in)
     syscall
 
 ### `listen()`
@@ -246,7 +244,7 @@ If the password is correct the shellcode spawns a shell, otherwise it quits. I d
 - I wanted the password to be of *any size* up to at least 16 bytes
 - and that it would be trivial to change the password, no special knowledge needed
 
-### Defining the password
+### Define the password
 
 Just define the bytes (`db`) of the password. It will also come in handy to know the size of the password. You could hardcode it, but instead I defined a byte that will have the result of `$-password`, i.e. subtract the address of the current line (`$`) to that of the `password` label, which gives us the length of the password.
 
@@ -257,7 +255,7 @@ This definition will allow to change the shellcode's password trivially by chang
 
 ### Read the password
 
-We need to read input from the user. How do we do this? We use the `read(2)` syscall. We need to pass it which file descriptor to read from, the address where to read to, and how many bytes to read. The file description we want will be the one that was returned by `accept`, so that the password is read from the TCP connection. However, I started by reading from `stdin`, which corresponds to file descriptor 0 (see [`man stdin`][man_3_stdin]). This way I was able to test the password part of the code separately from the network part, to ease testing.
+We need to read input from the user. How do we do this? We use the [`read(2)`][man_2_read] syscall. We need to pass it which file descriptor to read from, the address where to read to, and how many bytes to read. The file description we want will be the one that was returned by `accept`, so that the password is read from the TCP connection. However, I started by reading from `stdin`, which corresponds to file descriptor 0 (from [`man stdin`][man_3_stdin]). This way I was able to test the password part of the code separately from the network part, to ease testing.
 
 I picked the read size as 16, so the shellcode will work correctly with passwords up to 16 bytes. To increase this limit all that needs to be done is changing 16 to a greater value.
 
@@ -279,7 +277,7 @@ To compare the passwords we have to compare the value in the memory written to b
 
 Which did you pick? Picking the wrong one would result in a trivial authentication bypass ;) Answer below.
 
-To compare the passwords you could write a loop. Instead, I chose to leverage the `repz` instruction combined with `cmpsb`. `repz` repeats an instruction while RCX is not zero and ZF is set, decrementing RCX after each repetition; while `cmpsb` compares the byte at the address in RSI with the one at the address of RDI, updates the flags register and increments/decrements RSI and RDI according to the direction flag (DF).
+To compare the passwords you could write a loop. Instead, I chose to leverage the `repz` instruction combined with `cmpsb`. `repz` repeats an instruction while RCX is not zero and ZF is set, decrementing RCX after each repetition; while `cmpsb` compares the byte at the address in RSI with the one at the address in RDI, updates the flags register and increments/decrements RSI and RDI according to the direction flag (DF).
 
 The result is that `repz` will stop repeating when the length to compare (in RCX) reaches 0 or a byte of the passwords does not match. To know which happened we can check the ZF flag: if it's not set it means `repz` ended because of a non-matching byte and the password is wrong. In that case we call `exit`. Otherwise the password is correct and we spawn the shell.
 
@@ -531,23 +529,25 @@ Shellcode disassembly revealing nulls:
 Removing nulls
 --------------
 
-We're almost done. Now we want to remove nulls. From the `objdump` above you can see all null bytes are in `mov` instructions with immediate values. To remove these we can move/add to lower parts of the registers instead of moving 64-bit values (whose higher bytes are nulls). But you need to make sure the higher part of the register is zeroed before (typically by xoring the register with itself).
+We're almost done. Now we want to remove nulls. From the `objdump` above you can see all null bytes are in `mov` instructions with immediate values. To remove these we can move/add to lower parts of the registers, instead of moving 64-bit values (whose higher bytes are nulls). But you need to make sure the higher part of the register is zeroed before (typically by xoring the register with itself).
 
 Example:
 
-    mov rax, 41   ; b8 29 00 00 00          mov    eax,0x29
+    mov rax, 41     ; b8 29 00 00 00
 
     ; can be rewritten as
 
-    xor rax, rax  ; 48 31 c0                xor    rax,rax
-    mov al, 41    ; b0 29                   mov    al,0x29
+    xor rax, rax    ; 48 31 c0
+    mov al, 41      ; b0 29
 
 Optimising
 ----------
 
 After removing null bytes my shellcode was 183 bytes long. Can we do better? Yes, we can.
 
-To do this my process was to go through each part of the code and think about and try optimisations for each. It involved trial and error (assembling and disassembling) to understand which equivalent instructions could be used that were shorted. The [Intel development manuals][intel_sdm] and/or [this site][felixcloutier_x86] are also useful. Below I'll explain my main optimisations.
+To do this my process was to go through each part of the code and think about and try optimisations for each. It involved trial and error (assembling and disassembling) to understand which equivalent instructions could be used that were shorter. The [Intel development manuals][intel_sdm] and/or [this site][felixcloutier_x86] are also useful. Below I'll explain my main optimisations.
+
+<!-- it sees rasm2 is not 100% trustable. for example it assembles pop eax, which is invalid in 64-bit mode
 
 To ease taking a look at the length of opcodes you can leverage Radare2's `rasm2` to interactively get the opcodes for instructions:
 
@@ -568,6 +568,7 @@ The `sed` part is optional. It's just so the output is for example `48 31 c0` in
 For instructions with labels, such as `jne exit` and `lea rdi, [rel password]`, this method won't work and you should assemble and disassemble to look at the opcodes. In these cases it might be useful to disassemble just part of the code, for example if you want do disassemble only from the label `check_password` until the next label you can use:
 
     objdump -M intel bind-shell-pass.o --disassemble=check_password
+--- -->
 
 ### xor self/mov imm vs push imm/pop
 
@@ -622,7 +623,7 @@ This is very specific, but if you know that the 31st bit of RAX is zero and want
 
 ### Reserving stack space
 
-Reserving space on the stack involves adjusting RSP by subtracting the number of bytes to reserve. In some cases you might also need to initialise the reserved bytes. This was the case when preparing the structure for `bind`. We wanted to reserve 4 bytes for `sin_addr` and zero them. I did it like this:
+Reserving space on the stack involves adjusting RSP by subtracting the number of bytes to reserve. In some cases you might also need to initialise the reserved bytes. This was the case when preparing the structure for `bind`. We wanted to reserve 4 bytes for `sin_addr` and zero them. I wrote it like this:
 
     xor eax, eax
     mov dword [rsp-4], eax
@@ -652,7 +653,7 @@ Another common operation is to move values between 64-bit registers. The opcodes
 
     48 89 c3
 
-As you may have noticed pushing and popping 64-bit registers results in 1-byte opcodes. Therefore, we can rewrite 64-bit register moves a `push` followed by a `pop`:
+As you may have noticed, pushing and popping 64-bit registers results in 1-byte opcodes. Therefore, we can rewrite 64-bit register moves a `push` followed by a `pop`:
 
     push rax
     pop rbx
@@ -664,7 +665,7 @@ We save 1 byte for each of these operations.
 
 ### Take advantage of syscall return values
 
-Syscall return values are placed in RAX. On success most syscalls return a non-negative integer. This come can in handy because it might help with the initialisations of RAX. For example to call `listen` we need `rax=50`. Normally we'd for example:
+Syscall return values are placed in RAX. On success most syscalls return a non-negative integer. This come can in handy because it might help with the initialisations of RAX. For example to call `listen` we need `rax=50`. Normally we'd write for example:
 
     xor rax, rax
     mov al, 50
@@ -673,7 +674,7 @@ However, since before calling `listen` we call `bind`, which on success returns 
 
 ### Pushing the password
 
-In the password comparison part I used the two relative address instructions:
+In the password comparison part I used two relative addressing instructions:
 
     xor ecx, ecx
     mov cl, [rel pass_len]
@@ -698,7 +699,7 @@ It would be nice to get rid of those 0xff. I could find no way to shorten the of
     repz cmpsb
     jne exit
 
-I tried this and after adjusting the code to this change 12 bytes were saved. However, I opted *not to use* this optimisation in the final shellcode. Why? Because I want the password to be trivial to change. Changing the password in the code above would require not only to calculate the new number to push but also to modify the instructions. Imagine you wanted to use "foobar" as the password instead: a single push of 4 bytes would no longer work, you'd have to add another push of 2 bytes. Oh, and don't forget to change the length of the password! Compare this with the ease of just typing in a new password.
+I tried this and after adjusting the code to this change 12 bytes were saved. However, I opted *not to use* this optimisation in the final shellcode. Why? Because I wanted the password to be trivial to change. Changing the password in the code above would require not only to calculate the new number to push but also to modify the instructions. Imagine you wanted to use "foobar" as the password instead: a single push of 4 bytes would no longer work, you'd have to add another push of 2 bytes. Oh, and don't forget to change the length of the password! Compare this with the ease of just typing in a new password.
 
 Conclusion
 ----------
