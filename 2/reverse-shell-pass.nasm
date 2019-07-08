@@ -12,14 +12,19 @@ socket:
     ; AF_INET = 2
     ; SOCK_STREAM = 1
     ; __NR_socket = 41
+    ; On success, a file descriptor for the new socket is returned
 
-    mov rax, 41
-    mov rdi, 2
-    mov rsi, 1
-    mov rdx, 0
+    push 41
+    pop rax
+    push 2
+    pop rdi
+    push 1
+    pop rsi
+    cdq       ; copies rax's bit 31 to all bits of edx (zeroes rdx)
     syscall
 
-    mov rdi, rax
+    push rax
+    pop rdi
 
 connect:
     ; server.sin_family = AF_INET;    short
