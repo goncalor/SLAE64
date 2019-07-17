@@ -55,7 +55,7 @@ With the C code as reference each of these parts was implemented in assembly as 
 
 ### `socket()`
 
-You need to call [`syscall(2)`][man_2_syscall] with the appropriate arguments. To figure out the values of the macros `AF_INET` and `SOCK_STREAM` you can use Python:
+You need to call [`socket(2)`][man_2_socket] with the appropriate arguments. To figure out the values of the macros `AF_INET` and `SOCK_STREAM` you can use Python:
 
     $ python3
     >>> import socket
@@ -303,7 +303,7 @@ At this point we have a complete shellcode for a password-protected TCP bind she
 
 Regarding the shellcode size right now we have 211 bytes. This can be substantially improved.
 
-    $ objdump -d test.o | grep -P ":\t" | cut -f2 | tr -d ' \n' | sed -e 's/../\\x&/g' | grep -o x | tr -d '\n' | wc -c
+    $ objdump -d bind-shell-pass.o | grep -P ":\t" | cut -f2 | tr -d ' \n' | sed -e 's/../\\x&/g' | grep -o x | tr -d '\n' | wc -c
     211
 
 Unoptimised shellcode:
@@ -905,7 +905,7 @@ That is all. Thank you for reading. Final shellcode below.
         mov al, 60
         syscall
 
-[man_2_syscall]: https://linux.die.net/man/2/syscall
+[man_2_socket]: https://linux.die.net/man/2/socket
 [man_2_bind]: https://linux.die.net/man/2/bind
 [man_2_dup2]: https://linux.die.net/man/2/dup2
 [man_2_execve]: https://linux.die.net/man/2/execve
