@@ -16,8 +16,8 @@ It seems this shellcode was invented or first documented by Skape on [this paper
   - small (to fit where your larger payload doesn't)
   - fast (so that it won't take a long time to search memory)
 
-Searching memory
-----------------
+Safely searching memory
+-----------------------
 
 The egg hunter has to search all the virtual address space (VAS) for the current process. The VAS is divided into memory pages which are "the smallest unit of data for memory management in a virtual memory operating system".
 
@@ -34,9 +34,9 @@ A process's memory consists of multiple regions with different purposes. You nor
         mov rax, 60  ; exit
         syscall
 
-    $ nasm -felf64 test.nasm 
+    $ nasm -felf64 test.nasm
     $ ld test.o -o test
-    $ ./test 
+    $ ./test
     Segmentation fault (core dumped)
 
 What happened above is that we tried to use `scasd` to perform a compasison with the memory address `0x10`. This resulted in a segmentation fault, so it seems this address is not part of the program's memory. We can check this is true by using for example GDB:
@@ -64,12 +64,50 @@ We see the first mapped region in the VAS is `0x400000` to `0x402000`, so addres
 
 With this in mind, we need a way to tell which pages are mapped and search only those pages. Otherwise our shellcode will crash. The solution discussed by Skape is to abuse the system call interface to have the kernel validate if a virtual memory address (VMA) is valid.
 
+> When a system call encounters an invalid memory address, most will return the `EFAULT` error code to indicate that a pointer provided to the system call was not valid.
 
+As Skape suggests, we can use for example [`access(2)`][man_2_access] to check the addresses. We will pass it the address we want to check as its first argument and check the return value.
+
+    global _start
+
+    _start:
+        ; int access(const char *pathname, int mode)
+        mov rax, 21
+        mov rdi, 0x10
+        syscall
+
+        mov rdi, rax  ; pass return value to exit
+        mov rax, 60   ; exit
+        syscall
+
+    $ nasm -felf64 test.nasm
+    $ ld test.o -o test
+    $ ./test
+    $ echo $?
+    242
+
+You can see the program no longer crashes and it returns 242, which is in fact `-EFAULT` or -14, intepreted as unsigned (misleading, I know).
+
+    $ python3
+    >>> import errno
+    >>> errno.EFAULT
+    14
+
+    $ grep -C1 EFAULT /usr/include/asm-generic/errno-base.h
+    #define	EACCES		13	/* Permission denied */
+    #define	EFAULT		14	/* Bad address */
+    #define	ENOTBLK		15	/* Block device required */
+
+Ok, with this knowledge we're set to write/understand the egg hunter!
+
+Implementation
+--------------
 
 
 The smallest page size on x86-64 is 4 kB
 
 [skape_egg_hunter]: https://web.archive.org/web/20190516191849/http://www.hick.org/code/skape/papers/egghunt-shellcode.pdf
+[man_2_access]: https://linux.die.net/man/2/access
 
 ----
 
