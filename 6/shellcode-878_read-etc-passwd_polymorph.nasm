@@ -24,7 +24,7 @@ _readfile:
     sub eax, eax                ; __NR_read = 0
     syscall
 
-    ; write to stdout
+    ; write
     xor edi, edi
     inc dil                     ; stdout fd = 1
     mov rdx, rax

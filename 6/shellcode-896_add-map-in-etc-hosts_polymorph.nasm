@@ -25,7 +25,7 @@ _start:
     jmp data
 
 write:
-    pop rsi 
+    pop rsi
     mov dl, 19                   ; length in rdx
     syscall
 
@@ -38,7 +38,7 @@ write:
     ;xor eax, eax                ; already done by close
     add al, 60
     xor edi, edi
-    syscall 
+    syscall
 
 data:
     call write
