@@ -6,7 +6,7 @@ from os import urandom
 key = bytes(sys.argv[1], 'utf-8')
 shellcode = bytes.fromhex(sys.argv[2].replace('\\x', ''))
 
-iv = urandom(8)
+iv = b'\x00\x00\x00\x00\x00\x00\x00\x00' #urandom(8)
 cipher = blowfish.Cipher(key)
 blocks = cipher.encrypt_cfb(shellcode, iv)
 
