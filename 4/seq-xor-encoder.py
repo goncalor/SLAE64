@@ -16,6 +16,6 @@ for b in shellcode:
 output = bytes(output)
 
 print()
-print(''.join([hex(b) for b in output]).replace('0x', '\\x'))
+print(''.join(['\\x{:02x}'.format(b) for b in output]))
 print()
-print(','.join([hex(b) for b in output]))
+print(','.join(['0x{:02x}'.format(b) for b in output]))

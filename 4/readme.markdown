@@ -53,9 +53,9 @@ I wrote the encoder in Python. The shellcode is passed as an argument. A second 
     output = bytes(output)
 
     print()
-    print(''.join([hex(b) for b in output]).replace('0x', '\\x'))
+    print(''.join(['\\x{:02x}'.format(b) for b in output]))
     print()
-    print(','.join([hex(b) for b in output]))
+    print(','.join(['0x{:02x}'.format(b) for b in output]))
 
 Below an example of encoding a stack-based `execve` shellcode using `n = 0xaa`.
 
