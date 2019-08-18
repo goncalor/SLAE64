@@ -90,8 +90,9 @@ read_password:
 
 compare_password:
     xor ecx, ecx
-    mov cl, [rel pass_len]
-    lea rdi, [rel password]
+    lea rdi, [rel pass_len]
+    mov cl, [rdi]
+    sub rdi, rcx
     cld
     repz cmpsb
     jne exit
