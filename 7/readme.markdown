@@ -1,4 +1,4 @@
-Assignment #7 - Crypters
+Assignment #7 – Crypters
 ========================
 
 For this assignment I had to create a crypter, i.e. a program to encrypt a shellcode. This encrypted shellcode can then be decrypted and executed at runtime. Any encryption algorithm and programming language could be used. I chose to use [Blowfish][wikipedia_blowfish] in [Cipher Feedback mode][wikipedia_cfb] (CFB).
